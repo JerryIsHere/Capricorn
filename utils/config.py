@@ -11,13 +11,16 @@ DEFAULT_MODEL = "poolside/laguna-xs-2.1:free"
 OPENROUTER_FREE_FALLBACK = "openrouter/free"
 DEFAULT_OPENROUTER_MODELS = (
     DEFAULT_MODEL,
+    "poolside/laguna-s-2.1:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
+    "nvidia/nemotron-3.5-lightning:free",
     "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
     OPENROUTER_FREE_FALLBACK,
 )
 
 
-DEFAULT_VISION_MODELS = ("google/gemini-2.0-flash-exp:free", "meta-llama/llama-3.2-11b-vision-instruct:free")
+DEFAULT_VISION_MODELS = ("google/gemma-4-31b-it:free", "nvidia/nemotron-3.5-super-vl:free", "google/gemma-4-26b-a4b-it:free")
 
 
 def parse_models(raw: str, default: tuple[str, ...] = (DEFAULT_MODEL,)) -> tuple[str, ...]:

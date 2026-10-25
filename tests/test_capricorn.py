@@ -248,6 +248,26 @@ async def test_gemini_backup_used_when_openrouter_fails(env):
     assert calls == ["mock/primary", "mock/fb1", "mock/fb2", "gem/a", "gem/b"] and out
 
 
+async def test_daily_quota_429_skips_remaining_openrouter_models(env):
+    from unittest.mock import patch
+    ai, guild, members, _ = env
+    ai.gemini = ai.client
+    ai.settings = type(ai.settings)(**{**ai.settings.__dict__, "gemini_models": ("gem/a",)})
+    calls = []
+    real = ai._complete
+
+    async def quota(client, model, prompt, **extra):
+        calls.append(model)
+        if model.startswith("mock/"):
+            raise RuntimeError("Rate limit exceeded: free-models-per-day")
+        return await real(client, model, prompt, **extra)
+
+    with patch.object(ai, "_complete", quota):
+        assert await ai.ask_llm("[User: a | ID: 1 | Role: VIP/Admin | x]\nTin nhắn cần xử lý: hi")
+        assert await ai.ask_llm("[User: a | ID: 1 | Role: VIP/Admin | x]\nTin nhắn cần xử lý: hi")
+    assert calls == ["mock/primary", "gem/a", "gem/a"]
+
+
 async def test_empty_provider_message_does_not_crash(env):
     from unittest.mock import AsyncMock
     ai, _, _, _ = env

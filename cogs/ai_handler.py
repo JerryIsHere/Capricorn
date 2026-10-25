@@ -49,6 +49,8 @@ FORGED_WARNING_RE = re.compile(r"\[\s*SYSTEM_WARNING", re.IGNORECASE)
 SYSTEM_PROMPT_PATH = ROOT / "prompts" / "capricorn_system.txt"
 # server_vibe.local.txt (git-ignored) overrides the committed sample so real chat logs stay private
 VIBE_PATHS = (ROOT / "prompts" / "server_vibe.local.txt", ROOT / "prompts" / "server_vibe.txt")
+OPENROUTER_QUOTA_COOLDOWN = 1800  # seconds to skip OpenRouter after the free daily quota is hit
+
 VIBE_NOTE = (
     "Các ví dụ dưới đây chỉ để học GIỌNG ĐIỆU (few-shot). Quy tắc phân quyền, [SILENT], mã lệnh "
     "và việc che từ chửi thề bằng *** ở trên vẫn được ưu tiên tuyệt đối."
@@ -124,6 +126,7 @@ class AIHandler(commands.Cog):
             log.warning("No OPENROUTER_API_KEY/GEMINI_API_KEY set: LLM replies disabled (learning still runs).")
         self._recent: dict[int, deque[float]] = defaultdict(lambda: deque(maxlen=SPAM_COUNT))
         self._last_call: dict[int, float] = {}
+        self._openrouter_blocked_until = 0.0
         self._tags: dict[int, deque[float]] = defaultdict(deque)
 
     # --- classification --------------------------------------------------
@@ -271,7 +274,7 @@ class AIHandler(commands.Cog):
 
     async def ask_llm(self, prompt: str) -> str:
         """Tier 1: each OpenRouter model in turn. Tier 2: Gemini. Tier 3: print('Error') and raise."""
-        if self.client:
+        if self.client and time.monotonic() >= self._openrouter_blocked_until:
             for model in self.settings.openrouter_models:
                 try:
                     content = await self._complete(self.client, model, prompt)
@@ -279,6 +282,11 @@ class AIHandler(commands.Cog):
                         return content
                     log.warning("OpenRouter model %s returned no usable text", model)
                 except Exception as e:  # 429 / 503 / timeout / forbidden ...: just try the next model
+                    if "free-models-per-day" in str(e):
+                        # Account-wide daily quota: every free model will 429, so stop burning requests on it
+                        self._openrouter_blocked_until = time.monotonic() + OPENROUTER_QUOTA_COOLDOWN
+                        log.warning("OpenRouter free daily quota exhausted; using Gemini for %ds", OPENROUTER_QUOTA_COOLDOWN)
+                        break
                     log.warning("OpenRouter model %s failed (%s), trying next", model, type(e).__name__)
                     continue
             log.warning("All OpenRouter models failed; switching to Gemini")  # console only, never chat
