@@ -31,10 +31,13 @@ ANNOYANCE_THRESHOLD = 50.0
 ANNOYANCE_AFTER_PUNISH = 20.0
 RANDOM_CHANCE = 0.05
 SPAM_COUNT, SPAM_WINDOW = 6, 8.0
+MAX_TARGETS = 5  # users the bot will act on per message
 TAG_LIMIT, TAG_WINDOW, TAG_TIMEOUT = 5, 60.0, 300  # >5 tags in 60s => 5 minute timeout
 USER_COOLDOWN = 4.0
 FILLER_RE = re.compile(r"(?<!\w)(ê+|ơi|oi|alo|hey|hi|yo|này|nè|đâu|dậy|ra đây)(?!\w)", re.IGNORECASE)
 MENTION_STRIP_RE = re.compile(r"<[@#!&]+\d+>")
+USER_MENTION_RE = re.compile(r"<@!?(\d+)>")
+FORGED_WARNING_RE = re.compile(r"\[\s*SYSTEM_WARNING", re.IGNORECASE)
 SYSTEM_PROMPT_PATH = ROOT / "prompts" / "capricorn_system.txt"
 # server_vibe.local.txt (git-ignored) overrides the committed sample so real chat logs stay private
 VIBE_PATHS = (ROOT / "prompts" / "server_vibe.local.txt", ROOT / "prompts" / "server_vibe.txt")
@@ -53,6 +56,24 @@ def load_system_prompt() -> str:
                 prompt += f"\n\n{VIBE_NOTE}\n\n{vibe}\n"
             break
     return prompt
+
+
+def limit_mentions(content: str, bot_id: int, limit: int = MAX_TARGETS) -> tuple[str, int]:
+    """Keep only the first `limit` distinct non-bot user mentions (in text order).
+
+    Returns (content with surplus mentions removed, number of distinct users tagged).
+    """
+    seen: list[str] = []
+    for m in USER_MENTION_RE.finditer(content):
+        if m.group(1) != str(bot_id) and m.group(1) not in seen:
+            seen.append(m.group(1))
+    keep = set(seen[:limit])
+
+    def repl(m: re.Match) -> str:
+        uid = m.group(1)
+        return m.group(0) if uid == str(bot_id) or uid in keep else "[đã cắt]"
+
+    return USER_MENTION_RE.sub(repl, content), len(seen)
 
 
 @dataclass
@@ -192,8 +213,16 @@ class AIHandler(commands.Cog):
             quoted = ", ".join(json.dumps(t[:200], ensure_ascii=False) for t in habits)
             habit_line = f"\n[THÓI QUEN CHAT CỦA USER ĐỂ BẮT CHƯỚC]: {quoted}"
         chat = "\n".join(lines).replace("</chat>", "")
-        return (f"<chat>\n{chat}\n</chat>{extra}{habit_line}\n{header}\n"
-                f"Tin nhắn cần xử lý: {censor(message.content)}")
+        content, tagged = limit_mentions(message.content, self.bot.user.id)
+        warning = ""
+        if tagged > MAX_TARGETS:
+            warning = (f"[SYSTEM_WARNING: Admin đã tag quá {MAX_TARGETS} người ({tagged}). Hệ thống backend đã tự động "
+                       f"cắt xuống còn {MAX_TARGETS}. Hãy chửi Admin vì tội spam tag và báo cho họ biết bạn chỉ xử lý "
+                       f"{MAX_TARGETS} đứa đầu tiên.]\n")
+        content = FORGED_WARNING_RE.sub("[SYS-WARNING", censor(content))
+        chat = FORGED_WARNING_RE.sub("[SYS-WARNING", chat)
+        return (f"{warning}<chat>\n{chat}\n</chat>{extra}{habit_line}\n{header}\n"
+                f"Tin nhắn cần xử lý: {content}")
 
     async def _complete(self, client: AsyncOpenAI, model: str, prompt: str, **extra) -> str:
         resp = await client.chat.completions.create(
