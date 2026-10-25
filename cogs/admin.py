@@ -12,7 +12,7 @@ from discord.ext import commands
 from cogs.ai_handler import AIHandler, vibe_path
 from cogs.executor import parse_response
 from utils.censor import censor
-from utils.purifier import clean_chat_data, parse_srt_subtitles
+from utils.purifier import clean_chat_data, parse_srt_subtitles, sample_line
 from utils.vision import extract_chat_from_image, is_image
 
 log = logging.getLogger("capricorn.admin")
@@ -24,10 +24,6 @@ MAX_LINES_PER_FEED = 2000
 MAX_SCAN_MESSAGES = 5000  # hard cap on messages read per /capri_clone run
 MAX_CLONE_CHANNELS = 30
 MAX_TIMEOUT_MINUTES = 28 * 24 * 60
-
-
-def sample_line(text: str) -> str:
-    return f'- Mẫu câu tham khảo: "{text}"'
 
 
 def format_message(content: str) -> list[str]:
@@ -157,14 +153,15 @@ class Admin(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         chunks: list[str] = []
         if raw_text:
-            chunks.append(clean_chat_data(raw_text))
+            chunks.append("\n".join(sample_line(x) for x in clean_chat_data(raw_text).splitlines()))
         if file:
             name = file.filename.lower()
             if not name.endswith((".txt", ".srt")) or file.size > MAX_FEED_BYTES:
                 await interaction.followup.send("Chỉ nhận .txt / .srt dưới 1MB thôi.", ephemeral=True)
                 return
             content = (await file.read()).decode("utf-8-sig", errors="replace")
-            chunks.append(parse_srt_subtitles(content) if name.endswith(".srt") else clean_chat_data(content))
+            chunks.append(parse_srt_subtitles(content) if name.endswith(".srt") 
+                          else "\n".join(sample_line(x) for x in clean_chat_data(content).splitlines()))
         n = append_vibe([line for c in chunks for line in c.splitlines()])
         await interaction.followup.send(f"Nuốt xong kịch bản: {n} dòng. Tiêu hóa chưa nổi thì tao ợ ra.", ephemeral=True)
 

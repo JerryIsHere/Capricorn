@@ -16,6 +16,10 @@ HTML_TAG_RE = re.compile(r"<[^>]+>")
 MIN_LINE_LEN = 2
 
 
+def sample_line(text: str) -> str:
+    return f'- Mẫu câu tham khảo: "{text}"'
+
+
 def clean_chat_data(text: str) -> str:
     """Strip URLs, custom emoji, tags and spam; drop lines shorter than 2 characters."""
     text = URL_RE.sub("", text)
@@ -28,7 +32,7 @@ def clean_chat_data(text: str) -> str:
 
 
 def parse_srt_subtitles(srt_content: str) -> str:
-    """Extract spoken lines from .srt content, cleaned and formatted as `Thoại: "..."` lines."""
+    """Extract spoken lines from .srt content, cleaned and formatted as sample-sentence lines."""
     kept: list[str] = []
     for line in srt_content.lstrip("\ufeff").splitlines():
         if SRT_INDEX_RE.match(line) or SRT_TIME_RE.search(line):
@@ -37,4 +41,4 @@ def parse_srt_subtitles(srt_content: str) -> str:
         if line:
             kept.append(line)
     cleaned = clean_chat_data("\n".join(kept))
-    return "\n".join(f'Thoại: "{line}"' for line in cleaned.splitlines())
+    return "\n".join(sample_line(line) for line in cleaned.splitlines())

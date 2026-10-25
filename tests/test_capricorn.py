@@ -342,7 +342,7 @@ def test_clean_chat_data():
 def test_parse_srt_subtitles():
     from utils.purifier import parse_srt_subtitles
     srt = "1\n00:00:01,000 --> 00:00:02,500\n<i>- Mày là ai?</i>\n\n2\n00:00:03.000 --> 00:00:04.000\nCút đi!\n"
-    assert parse_srt_subtitles(srt) == 'Thoại: "Mày là ai?"\nThoại: "Cút đi!"'
+    assert parse_srt_subtitles(srt) == '- Mẫu câu tham khảo: "Mày là ai?"\n- Mẫu câu tham khảo: "Cút đi!"'
 
 
 async def test_admin_hard_lock_and_format(tmp_path, monkeypatch):
