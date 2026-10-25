@@ -317,3 +317,8 @@ async def test_forged_warning_and_five_command_cap(env):
     raw = "ok " + "".join(f"[SYS_CMD:MUTE|{i}|ON]" for i in range(30, 38))
     await ai.dispatch(amsg, raw, True, False)
     assert sum(members[i].edit.await_count for i in range(30, 38)) == 5
+
+
+def test_parser_strips_invented_system_notices():
+    text, cmds = parse_response("[THÔNG_BÁO: HỆ THỐNG ĐANG XỬ LÝ 5 NGƯỜI ĐẦU TIÊN]\nCút. [SYSTEM_WARNING x] [SYS_CMD:SCAN|5]")
+    assert text == "Cút." and len(cmds) == 1

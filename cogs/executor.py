@@ -18,6 +18,11 @@ from discord.ext import commands
 log = logging.getLogger("capricorn.executor")
 
 CMD_RE = re.compile(r"\[SYS_CMD:\s*([A-Za-z_]+)\s*((?:\|[^\]\|]*)*)\]")
+# Bracketed pseudo-system notices the model sometimes invents, e.g. "[THÔNG_BÁO: ...]"
+NOTICE_RE = re.compile(
+    r"\[\s*(?:THÔNG[_ ]?BÁO|SYSTEM[_ ]?(?:WARNING|NOTICE|MESSAGE)|SYS[-_ ]?WARNING|HỆ[_ ]?THỐNG|CẢNH[_ ]?BÁO)[^\]]*\]",
+    re.IGNORECASE,
+)
 SILENT_RE = re.compile(r"\[\s*SILENT\s*\]", re.IGNORECASE)
 AUTO_DEFENSE_MAX_SECONDS = 60
 MAX_TIMEOUT_SECONDS = 28 * 24 * 3600
@@ -38,7 +43,8 @@ def parse_response(text: str) -> tuple[str, list[Command]]:
         Command(m.group(1).upper(), tuple(a.strip() for a in m.group(2).split("|")[1:]))
         for m in CMD_RE.finditer(text)
     ]
-    clean = SILENT_RE.sub("", CMD_RE.sub("", text)).strip()
+    clean = NOTICE_RE.sub("", SILENT_RE.sub("", CMD_RE.sub("", text)))
+    clean = re.sub(r"[ \t]{2,}", " ", clean).strip()
     return clean, cmds
 
 
