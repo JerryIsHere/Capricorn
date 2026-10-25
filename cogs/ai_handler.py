@@ -233,9 +233,19 @@ class AIHandler(commands.Cog):
             temperature=0.8,
             **extra,
         )
-        content = (resp.choices[0].message.content or "").strip()
+        if not resp.choices:
+            log.warning("Model %s returned no choices", model)
+            return ""
+        choice = resp.choices[0]
+        message = choice.message
+        if message is None:
+            log.warning("Model %s returned no assistant message (finish_reason=%s)",
+                        model, choice.finish_reason)
+            return ""
+        content = (message.content or "").strip()
         if not content:
-            log.warning("Model %s returned empty content", resp.model)
+            log.warning("Model %s returned empty content (finish_reason=%s)",
+                        resp.model or model, choice.finish_reason)
         return content
 
     async def ask_llm(self, prompt: str) -> str:
@@ -261,6 +271,7 @@ class AIHandler(commands.Cog):
                 content = await self._complete(self.gemini, model, prompt)
                 if content:
                     return content
+                log.warning("Gemini model %s returned no usable text", model)
             except Exception as e:
                 last_exc = e
                 log.warning("Gemini model %s failed (%s), trying next", model, type(e).__name__)

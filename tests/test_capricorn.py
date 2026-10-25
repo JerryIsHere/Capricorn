@@ -245,6 +245,14 @@ async def test_gemini_backup_used_when_openrouter_fails(env):
     assert calls == ["mock/primary", "gem/a", "gem/b"] and out
 
 
+async def test_empty_provider_message_does_not_crash(env):
+    from unittest.mock import AsyncMock
+    ai, _, _, _ = env
+    ai.client.chat.completions.create = AsyncMock(return_value=MagicMock(
+        choices=[MagicMock(message=None, finish_reason="stop")], model="mock/empty"))
+    assert await ai._complete(ai.client, "mock/empty", "hello") == ""
+
+
 def test_parse_gemini_models_blocks_argon():
     from utils.config import DEFAULT_GEMINI_MODELS, parse_gemini_models
     assert parse_gemini_models("models/gemini-2.5-pro, gemini-argon-1,Argon-x,gemini-2.0-flash") == (
