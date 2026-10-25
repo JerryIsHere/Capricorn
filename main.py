@@ -38,15 +38,13 @@ class Capricorn(commands.Bot):
     async def on_ready(self) -> None:
         log = logging.getLogger("capricorn")
         log.info("Online as %s (%s)", self.user, self.user.id)
-        # Per-guild sync makes the commands appear instantly instead of after global propagation
+        # Commands are global only; wipe any per-guild copies from earlier versions so they don't show twice
         for guild in self.guilds:
             try:
-                self.tree.copy_global_to(guild=guild)
-                synced = await self.tree.sync(guild=guild)
-                log.info("Synced %d slash commands to guild %s", len(synced), guild.id)
+                self.tree.clear_commands(guild=guild)
+                await self.tree.sync(guild=guild)
             except discord.HTTPException as e:
-                log.error("Slash sync failed for guild %s: %s (re-invite the bot with the applications.commands scope)",
-                          guild.id, e)
+                log.warning("Could not clear guild commands for %s: %s", guild.id, e)
 
 
 def main() -> None:

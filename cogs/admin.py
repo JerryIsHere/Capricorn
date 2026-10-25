@@ -174,7 +174,7 @@ class Admin(commands.Cog):
         await interaction.response.send_message(
             "Đã xóa sạch mớ rác rưởi tụi mày nhét vào đầu tao. Băng thông lại sạch sẽ.", ephemeral=True)
 
-    @app_commands.command(name="capri_fry", description="Khóa mõm một thằng gonk và chửi nó")
+    @app_commands.command(name="capri_fry", description="Khóa mõm một thành viên và chửi nó")
     @app_commands.guild_only()
     async def capri_fry(self, interaction: discord.Interaction, target_user: discord.Member,
                         minutes: app_commands.Range[int, 1, MAX_TIMEOUT_MINUTES] = 10):
