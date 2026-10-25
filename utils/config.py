@@ -34,10 +34,12 @@ def parse_openrouter_models(raw: str) -> tuple[str, ...]:
     return models
 
 
+# Verified live; 3.8-flash is slow to answer so it goes last
 DEFAULT_GEMINI_MODELS = (
-    "gemini-3.8-flash",
     "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
+    "gemini-3.8-flash",
 )
 BLOCKED_MODEL_WORDS = ("argon",)  # never route to these, even if listed in the env
 
@@ -74,8 +76,10 @@ class Settings:
             openrouter_base_url=os.getenv("OPENROUTER_BASE_URL", "").strip()
             or "https://openrouter.ai/api/v1",
             gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
-            gemini_models=parse_gemini_models(
-                os.getenv("GEMINI_MODELS", "") or os.getenv("GEMINI_MODEL", "")),
+            # configured models first, then live defaults so a stale/404 list in the env can't kill the fallback
+            gemini_models=tuple(dict.fromkeys((
+                *parse_gemini_models(os.getenv("GEMINI_MODELS", "") or os.getenv("GEMINI_MODEL", "")),
+                *DEFAULT_GEMINI_MODELS))),
             gemini_base_url=os.getenv("GEMINI_BASE_URL", "").strip()
             or "https://generativelanguage.googleapis.com/v1beta/openai/",
             vip_role_id=int(vip) if vip.isdigit() else None,

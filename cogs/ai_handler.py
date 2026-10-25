@@ -252,7 +252,7 @@ class AIHandler(commands.Cog):
             model=model,
             messages=[{"role": "system", "content": load_system_prompt()},
                       {"role": "user", "content": prompt}],
-            max_tokens=400,
+            max_tokens=1000,  # reasoning models spend tokens thinking; 400 left them with empty replies
             temperature=0.8,
             **extra,
         )
