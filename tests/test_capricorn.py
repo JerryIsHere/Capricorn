@@ -257,8 +257,45 @@ def test_parse_gemini_models_blocks_argon():
     from utils.config import DEFAULT_GEMINI_MODELS, parse_gemini_models
     assert parse_gemini_models("models/gemini-2.5-pro, gemini-argon-1,Argon-x,gemini-2.0-flash") == (
         "gemini-2.5-pro", "gemini-2.0-flash")
-    assert parse_gemini_models("") == ("gemini-2.0-flash",)
+    assert parse_gemini_models("") == DEFAULT_GEMINI_MODELS
+    assert len(DEFAULT_GEMINI_MODELS) > 1
     assert parse_gemini_models("argon") == DEFAULT_GEMINI_MODELS
+
+
+def test_openrouter_free_router_is_always_last_fallback():
+    from utils.config import OPENROUTER_FREE_FALLBACK, parse_openrouter_models
+    assert parse_openrouter_models("one:free,two:free") == ("one:free", "two:free", OPENROUTER_FREE_FALLBACK)
+    assert parse_openrouter_models(f"one:free,{OPENROUTER_FREE_FALLBACK}") == (
+        "one:free", OPENROUTER_FREE_FALLBACK)
+
+
+async def test_gemini_fallback_notifies_admin_after_all_openrouter_models_fail(env):
+    from unittest.mock import patch
+    ai, guild, members, _ = env
+    ai.gemini = ai.client
+    ai.settings = type(ai.settings)(**{
+        **ai.settings.__dict__,
+        "gemini_models": ("gemini/a", "gemini/b"),
+    })
+    admin = make_member(20, "boss", admin=True)
+    members[20] = admin
+    msg = make_message(admin, "capri trả lời", guild)
+    calls = []
+
+    async def route(client, model, prompt, **extra):
+        calls.append(model)
+        if model.startswith("mock/"):
+            raise RuntimeError("OpenRouter down")
+        return "Đã qua Gemini."
+
+    with patch.object(ai, "_complete", route):
+        await ai.on_message(msg)
+        assert calls == ["mock/primary", "mock/fb1", "mock/fb2", "gemini/a"]
+
+    msg.channel.send.assert_awaited_once()
+    alert = msg.channel.send.await_args.args[0]
+    assert "<@1017049328264679435>" in alert and "chuyển sang Gemini" in alert
+    assert msg.reply.await_args.args[0] == "Đã qua Gemini."
 
 
 async def test_tag_spam_gets_five_minute_timeout(env):

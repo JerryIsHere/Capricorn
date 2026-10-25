@@ -8,6 +8,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL = "poolside/laguna-xs-2.1:free"
+OPENROUTER_FREE_FALLBACK = "openrouter/free"
+DEFAULT_OPENROUTER_MODELS = (
+    DEFAULT_MODEL,
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "google/gemma-4-31b-it:free",
+    OPENROUTER_FREE_FALLBACK,
+)
 
 
 DEFAULT_VISION_MODELS = ("google/gemini-2.0-flash-exp:free", "meta-llama/llama-3.2-11b-vision-instruct:free")
@@ -19,7 +26,19 @@ def parse_models(raw: str, default: tuple[str, ...] = (DEFAULT_MODEL,)) -> tuple
     models = tuple(dict.fromkeys(p for p in parts if p))
     return models or default
 
-DEFAULT_GEMINI_MODELS = ("gemini-2.0-flash",)
+
+def parse_openrouter_models(raw: str) -> tuple[str, ...]:
+    models = parse_models(raw, DEFAULT_OPENROUTER_MODELS)
+    if OPENROUTER_FREE_FALLBACK not in models:
+        models += (OPENROUTER_FREE_FALLBACK,)
+    return models
+
+
+DEFAULT_GEMINI_MODELS = (
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
+    "gemini-3.1-flash-lite",
+)
 BLOCKED_MODEL_WORDS = ("argon",)  # never route to these, even if listed in the env
 
 
@@ -51,7 +70,7 @@ class Settings:
         return cls(
             discord_token=os.getenv("DISCORD_TOKEN", "").strip(),
             openrouter_api_key=os.getenv("OPENROUTER_API_KEY", "").strip(),
-            openrouter_models=parse_models(os.getenv("OPENROUTER_MODELS", "")),
+            openrouter_models=parse_openrouter_models(os.getenv("OPENROUTER_MODELS", "")),
             openrouter_base_url=os.getenv("OPENROUTER_BASE_URL", "").strip()
             or "https://openrouter.ai/api/v1",
             gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
