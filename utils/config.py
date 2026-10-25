@@ -24,6 +24,7 @@ class Settings:
     openrouter_models: tuple[str, ...]  # first = primary, rest = OpenRouter fallbacks
     openrouter_base_url: str
     vip_role_id: int | None
+    call_role_ids: frozenset[int]  # extra roles that, when pinged, summon the bot
     db_path: Path
 
     @classmethod
@@ -37,5 +38,8 @@ class Settings:
             openrouter_base_url=os.getenv("OPENROUTER_BASE_URL", "").strip()
             or "https://openrouter.ai/api/v1",
             vip_role_id=int(vip) if vip.isdigit() else None,
+            call_role_ids=frozenset(
+                int(x) for x in re.split(r"[,\s]+", os.getenv("CAPRICORN_CALL_ROLE_IDS", "")) if x.isdigit()
+            ),
             db_path=db if db.is_absolute() else ROOT / db,
         )

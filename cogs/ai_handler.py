@@ -63,6 +63,12 @@ class AIHandler(commands.Cog):
         rid = self.settings.vip_role_id
         return rid is not None and any(r.id == rid for r in member.roles)
 
+    def _role_pinged(self, message: discord.Message) -> bool:
+        """True if a configured call role, or the bot's own managed role, was pinged."""
+        own = {r.id for r in message.guild.me.roles if r.managed} if message.guild and message.guild.me else set()
+        wanted = own | self.settings.call_role_ids
+        return any(r.id in wanted for r in message.role_mentions)
+
     def _is_reply_to_bot(self, message: discord.Message) -> bool:
         ref = message.reference
         if not ref:
@@ -76,6 +82,7 @@ class AIHandler(commands.Cog):
         flags = Flags()
         flags.direct = (
             bot_user in message.mentions
+            or self._role_pinged(message)
             or self._is_reply_to_bot(message)
             or bool(BOT_NAME_RE.search(content))
         )

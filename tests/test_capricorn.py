@@ -32,6 +32,7 @@ def make_message(author, content, guild, mentions=()):
     msg.channel = MagicMock(id=42)
     msg.channel.send = AsyncMock()
     msg.mentions, msg.reference = list(mentions), None
+    msg.role_mentions = []
     msg.reply = AsyncMock(return_value=MagicMock(id=99))
     return msg
 
@@ -43,7 +44,7 @@ async def env(tmp_path):
     mock_openrouter.REQUESTS.clear()
     settings = Settings(
         discord_token="x", openrouter_api_key="test-key", openrouter_models=("mock/primary", "mock/fb1", "mock/fb2"),
-        openrouter_base_url=str(server.make_url("/v1")), vip_role_id=VIP_ROLE,
+        openrouter_base_url=str(server.make_url("/v1")), vip_role_id=VIP_ROLE, call_role_ids=frozenset({777}),
         db_path=tmp_path / "t.db",
     )
     memory = Memory(":memory:")
@@ -171,3 +172,16 @@ def test_parse_models_tolerates_messy_input():
     assert parse_models("a:free, b:free ,,a:free") == ("a:free", "b:free")
     assert parse_models('(\n  "a:free"\n  "b:free"\n)') == ("a:free", "b:free")
     assert parse_models("") == (DEFAULT_MODEL,)
+
+
+async def test_role_ping_summons_bot(env):
+    ai, guild, members, _ = env
+    guild.me = MagicMock(roles=[MagicMock(id=888, managed=True)])
+    vip = make_member(40, "vip", role_ids=(VIP_ROLE,))
+    for rid, expect in ((777, True), (888, True), (123, False)):
+        ai._last_call.clear()
+        mock_openrouter.REQUESTS.clear()
+        msg = make_message(vip, "ê dậy đi", guild)
+        msg.role_mentions = [MagicMock(id=rid)]
+        await ai.on_message(msg)
+        assert bool(mock_openrouter.REQUESTS) is expect
