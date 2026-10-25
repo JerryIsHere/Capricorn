@@ -92,7 +92,7 @@ async def test_commoner_calling_bot_is_ignored(env):
     await ai.on_message(msg)
     assert len(mock_openrouter.REQUESTS) == 1  # LLM consulted...
     req = mock_openrouter.REQUESTS[0]
-    assert req["model"] == "mock/primary" and req["models"] == ["mock/fb1", "mock/fb2"]
+    assert req["model"] == "mock/primary"
     msg.reply.assert_not_called()  # ...but silence enforced
     user.timeout.assert_not_called()
 
@@ -236,13 +236,13 @@ async def test_gemini_backup_used_when_openrouter_fails(env):
 
     async def flaky(client, model, prompt, **extra):
         calls.append(model)
-        if model in ("mock/primary", "gem/a"):
+        if model in ("mock/primary", "mock/fb1", "mock/fb2", "gem/a"):
             raise RuntimeError("down")
         return await real(client, model, prompt, **extra)
 
     with patch.object(ai, "_complete", flaky):
         out = await ai.ask_llm("[User: a | ID: 1 | Role: VIP/Admin | x]\nTin nhắn cần xử lý: hi")
-    assert calls == ["mock/primary", "gem/a", "gem/b"] and out
+    assert calls == ["mock/primary", "mock/fb1", "mock/fb2", "gem/a", "gem/b"] and out
 
 
 async def test_empty_provider_message_does_not_crash(env):
@@ -257,7 +257,7 @@ def test_parse_gemini_models_blocks_argon():
     from utils.config import DEFAULT_GEMINI_MODELS, parse_gemini_models
     assert parse_gemini_models("models/gemini-2.5-pro, gemini-argon-1,Argon-x,gemini-2.0-flash") == (
         "gemini-2.5-pro", "gemini-2.0-flash")
-    assert parse_gemini_models("") == ("gemini-3.1-flash-lite",)
+    assert parse_gemini_models("") == ("gemini-2.0-flash",)
     assert parse_gemini_models("argon") == DEFAULT_GEMINI_MODELS
 
 
@@ -351,13 +351,49 @@ async def test_admin_hard_lock_and_format(tmp_path, monkeypatch):
     cog = admin.Admin(MagicMock())
     bad = MagicMock()
     bad.user.id = 5
-    bad.response.send_message = AsyncMock()
+    bad.response.defer = AsyncMock()
+    bad.followup.send = AsyncMock()
     await cog.capri_format.callback(cog, bad)
-    assert bad.response.send_message.await_args.args[0] == admin.DENY_MSG
+    bad.response.defer.assert_awaited()
+    assert bad.followup.send.await_args.args[0] == admin.DENY_MSG
     assert admin.append_vibe(["a: \"fuck\"", ""]) == 1
     assert "f***" in (tmp_path / "v.txt").read_text(encoding="utf-8")
     ok = MagicMock()
     ok.user.id = admin.ADMIN_ID
-    ok.response.send_message = AsyncMock()
+    ok.response.defer = AsyncMock()
+    ok.followup.send = AsyncMock()
     await cog.capri_format.callback(cog, ok)
     assert (tmp_path / "v.txt").read_text() == ""
+
+
+def test_censor_output_masks_vowels():
+    from utils.censor import censor_output
+    assert censor_output("fuck đéo lồn cặc đụ mẹ vcl f*ck mẹo") == "f*ck đ*o l*n c*c đ* m* v** f*ck mẹo"
+
+
+async def test_all_providers_down_prints_error_and_replies(env, capsys):
+    from unittest.mock import AsyncMock
+    from cogs.ai_handler import OUTAGE_REPLY
+    ai, guild, members, _ = env
+    ai.client.chat.completions.create = AsyncMock(side_effect=RuntimeError("429"))
+    admin = make_member(20, "boss", admin=True)
+    members[20] = admin
+    msg = make_message(admin, "capri nói gì đi", guild)
+    await ai.on_message(msg)
+    assert "Error" in capsys.readouterr().out
+    assert msg.reply.await_args.args[0] == OUTAGE_REPLY
+
+
+async def test_action_memory_in_prompt_and_neutral_reason(env):
+    from cogs.executor import BLACK_ICE_REASON, Command
+    ai, guild, members, _ = env
+    admin = make_member(20, "boss", admin=True)
+    victim = make_member(30, "vic")
+    members[30] = victim
+    ex = ai.bot.get_cog("Executor")
+    msg = make_message(admin, "x", guild)
+    await ex.execute(msg, [Command("TIMEOUT", ("30", "60"))])
+    assert victim.timeout.await_args.kwargs["reason"] == BLACK_ICE_REASON
+    assert "20" not in BLACK_ICE_REASON and "boss" not in BLACK_ICE_REASON
+    prompt = ai.build_prompt(make_message(victim, "mày mute tao à", guild), "Dân Thường", [], __import__("cogs.ai_handler", fromlist=["Flags"]).Flags(), 0, False)
+    assert "[LỊCH SỬ THỰC THI CỦA CAPRICORN]" in prompt and "<@30>" in prompt and "TIMEOUT" in prompt

@@ -55,6 +55,7 @@ class Admin(commands.Cog):
 
     async def _guard(self, interaction: discord.Interaction) -> bool:
         """Defer first (Discord gives only 3s), then enforce the admin hard-lock."""
+        await interaction.response.defer(ephemeral=True)
         if interaction.user.id == ADMIN_ID:
             return True
         await interaction.followup.send(DENY_MSG, ephemeral=True)
