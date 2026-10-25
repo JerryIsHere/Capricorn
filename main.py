@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from utils.config import Settings
 from utils.memory import Memory
 
-EXTENSIONS = ("cogs.executor", "cogs.ai_handler")
+EXTENSIONS = ("cogs.executor", "cogs.ai_handler", "cogs.admin")
 
 
 class Capricorn(commands.Bot):
@@ -20,7 +20,7 @@ class Capricorn(commands.Bot):
         intents.message_content = True
         intents.members = True
         intents.voice_states = True
-        # No prefix/slash commands: everything happens through on_message in the cogs.
+        # Chat behaviour lives in on_message; admin tooling is exposed as slash commands (cogs.admin).
         super().__init__(command_prefix=commands.when_mentioned, intents=intents, help_command=None)
         self.settings = settings
         self.memory = memory
@@ -28,6 +28,7 @@ class Capricorn(commands.Bot):
     async def setup_hook(self) -> None:
         for ext in EXTENSIONS:
             await self.load_extension(ext)
+        await self.tree.sync()
 
     async def on_ready(self) -> None:
         logging.getLogger("capricorn").info("Online as %s (%s)", self.user, self.user.id)

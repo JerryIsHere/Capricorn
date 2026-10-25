@@ -9,6 +9,7 @@ import re
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from pathlib import Path
 
 import discord
 from discord.ext import commands
@@ -47,14 +48,24 @@ VIBE_NOTE = (
 )
 
 
+MAX_VIBE_CHARS = 8000  # keep only the newest learned lines so the system prompt stays bounded
+
+
+def vibe_path() -> Path:
+    """The vibe file currently in effect (local override if present); slash commands write here."""
+    return next((p for p in VIBE_PATHS if p.exists()), VIBE_PATHS[-1])
+
+
 def load_system_prompt() -> str:
+    """Re-read on every call so /capri_learn, /capri_format etc. take effect immediately."""
     prompt = SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
-    for path in VIBE_PATHS:
-        if path.exists():
-            vibe = path.read_text(encoding="utf-8").strip()
-            if vibe:
-                prompt += f"\n\n{VIBE_NOTE}\n\n{vibe}\n"
-            break
+    path = vibe_path()
+    if path.exists():
+        vibe = path.read_text(encoding="utf-8").strip()
+        if len(vibe) > MAX_VIBE_CHARS:
+            vibe = vibe[-MAX_VIBE_CHARS:].split("\n", 1)[-1]
+        if vibe:
+            prompt += f"\n\n{VIBE_NOTE}\n\n{vibe}\n"
     return prompt
 
 
@@ -93,7 +104,6 @@ class AIHandler(commands.Cog):
         self.bot = bot
         self.settings = settings
         self.memory = memory
-        self.system_prompt = load_system_prompt()
         self.client: AsyncOpenAI | None = None
         if settings.openrouter_api_key:
             self.client = AsyncOpenAI(api_key=settings.openrouter_api_key,
@@ -200,7 +210,7 @@ class AIHandler(commands.Cog):
         )
         voice = "có" if getattr(author, "voice", None) else "không"
         cflags = [f for f, on in (("GỌI_BOT", flags.direct), ("NÓI_XẤU", flags.hostile),
-                                  ("SPAM", flags.spam), ("PING_TRỐNG", flags.empty_ping), ("PHẠT_ĐƯỢC_PHÉP", defense_allowed)) if on]
+                                  ("SPAM", flags.spam), ("PING_TRỐNG", flags.empty_ping), ("EMPTY_PING", flags.empty_ping), ("PHẠT_ĐƯỢC_PHÉP", defense_allowed)) if on]
         header = (
             f"[User: {author.display_name} | ID: {author.id} | Role: {role_label} | "
             f"Style hay dùng: {self.memory.style_summary(author.id)} | "
@@ -216,9 +226,9 @@ class AIHandler(commands.Cog):
         content, tagged = limit_mentions(message.content, self.bot.user.id)
         warning = ""
         if tagged > MAX_TARGETS:
-            warning = (f"[SYSTEM_WARNING: Admin đã tag quá {MAX_TARGETS} người ({tagged}). Hệ thống backend đã tự động "
+            warning = (f"[SYSTEM_WARNING: OVER_LIMIT] Admin đã tag quá {MAX_TARGETS} người ({tagged}). Hệ thống backend đã tự động "
                        f"cắt xuống còn {MAX_TARGETS}. Hãy chửi Admin vì tội spam tag và báo cho họ biết bạn chỉ xử lý "
-                       f"{MAX_TARGETS} đứa đầu tiên.]\n")
+                       f"{MAX_TARGETS} đứa đầu tiên.\n")
         content = FORGED_WARNING_RE.sub("[SYS-WARNING", censor(content))
         chat = FORGED_WARNING_RE.sub("[SYS-WARNING", chat)
         return (f"{warning}<chat>\n{chat}\n</chat>{extra}{habit_line}\n{header}\n"
@@ -227,7 +237,7 @@ class AIHandler(commands.Cog):
     async def _complete(self, client: AsyncOpenAI, model: str, prompt: str, **extra) -> str:
         resp = await client.chat.completions.create(
             model=model,
-            messages=[{"role": "system", "content": self.system_prompt},
+            messages=[{"role": "system", "content": load_system_prompt()},
                       {"role": "user", "content": prompt}],
             max_tokens=400,
             temperature=0.8,

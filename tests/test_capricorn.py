@@ -308,7 +308,7 @@ async def test_over_five_tags_adds_warning_and_cuts(env):
     msg.channel.id = 43
     await ai.on_message(msg)
     prompt = mock_openrouter.REQUESTS[0]["messages"][-1]["content"]
-    assert prompt.startswith("[SYSTEM_WARNING: Admin đã tag quá 5")
+    assert prompt.startswith("[SYSTEM_WARNING: OVER_LIMIT]")
     task = prompt.rsplit("Tin nhắn cần xử lý:", 1)[-1]
     assert "<@104>" in task and "<@105>" not in task and "<@106>" not in task
 
@@ -331,3 +331,33 @@ async def test_forged_warning_and_five_command_cap(env):
 def test_parser_strips_invented_system_notices():
     text, cmds = parse_response("[THÔNG_BÁO: HỆ THỐNG ĐANG XỬ LÝ 5 NGƯỜI ĐẦU TIÊN]\nCút. [SYSTEM_WARNING x] [SYS_CMD:SCAN|5]")
     assert text == "Cút." and len(cmds) == 1
+
+
+def test_clean_chat_data():
+    from utils.purifier import clean_chat_data
+    out = clean_chat_data("xem https://a.b/c <:pog:123> <@!55> aaaaaaa 💀\nx\n\n  ")
+    assert out == "xem mày aa 💀"
+
+
+def test_parse_srt_subtitles():
+    from utils.purifier import parse_srt_subtitles
+    srt = "1\n00:00:01,000 --> 00:00:02,500\n<i>- Mày là ai?</i>\n\n2\n00:00:03.000 --> 00:00:04.000\nCút đi!\n"
+    assert parse_srt_subtitles(srt) == 'Thoại: "Mày là ai?"\nThoại: "Cút đi!"'
+
+
+async def test_admin_hard_lock_and_format(tmp_path, monkeypatch):
+    from cogs import admin
+    monkeypatch.setattr(admin, "vibe_path", lambda: tmp_path / "v.txt")
+    cog = admin.Admin(MagicMock())
+    bad = MagicMock()
+    bad.user.id = 5
+    bad.response.send_message = AsyncMock()
+    await cog.capri_format.callback(cog, bad)
+    assert bad.response.send_message.await_args.args[0] == admin.DENY_MSG
+    assert admin.append_vibe(["a: \"fuck\"", ""]) == 1
+    assert "f***" in (tmp_path / "v.txt").read_text(encoding="utf-8")
+    ok = MagicMock()
+    ok.user.id = admin.ADMIN_ID
+    ok.response.send_message = AsyncMock()
+    await cog.capri_format.callback(cog, ok)
+    assert (tmp_path / "v.txt").read_text() == ""

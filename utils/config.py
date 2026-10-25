@@ -10,11 +10,14 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL = "poolside/laguna-xs-2.1:free"
 
 
-def parse_models(raw: str) -> tuple[str, ...]:
+DEFAULT_VISION_MODELS = ("google/gemini-2.0-flash-exp:free", "meta-llama/llama-3.2-11b-vision-instruct:free")
+
+
+def parse_models(raw: str, default: tuple[str, ...] = (DEFAULT_MODEL,)) -> tuple[str, ...]:
     # Tolerate commas, whitespace/newlines, quotes and bash-array parentheses
     parts = (p.strip("\"'()") for p in re.split(r"[,\s]+", raw))
     models = tuple(dict.fromkeys(p for p in parts if p))
-    return models or (DEFAULT_MODEL,)
+    return models or default
 
 DEFAULT_GEMINI_MODELS = ("gemini-3.1-flash-lite",)
 BLOCKED_MODEL_WORDS = ("argon",)  # never route to these, even if listed in the env
@@ -39,6 +42,7 @@ class Settings:
     vip_role_id: int | None
     call_role_ids: frozenset[int]  # extra roles that, when pinged, summon the bot
     db_path: Path
+    vision_models: tuple[str, ...] = DEFAULT_VISION_MODELS
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -60,4 +64,5 @@ class Settings:
                 int(x) for x in re.split(r"[,\s]+", os.getenv("CAPRICORN_CALL_ROLE_IDS", "")) if x.isdigit()
             ),
             db_path=db if db.is_absolute() else ROOT / db,
+            vision_models=parse_models(os.getenv("OPENROUTER_VISION_MODELS", ""), DEFAULT_VISION_MODELS),
         )
