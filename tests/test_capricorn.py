@@ -185,3 +185,23 @@ async def test_role_ping_summons_bot(env):
         msg.role_mentions = [MagicMock(id=rid)]
         await ai.on_message(msg)
         assert bool(mock_openrouter.REQUESTS) is expect
+
+
+def test_censor_masks_profanity():
+    from utils.censor import censor
+    assert censor("fucking đệt vcl, classic") == "f***ing đ*** v***, classic"
+
+
+async def test_prompt_has_masked_habits_and_hostile_still_detected(env):
+    ai, guild, members, memory = env
+    user = make_member(10, "dan")
+    members[10] = user
+    memory.add_message(42, 10, "dan", "fuck vl :)))")
+    memory.add_message(42, 10, "dan", "ok đệt")
+    msg = make_message(user, "capricorn fuck you", guild)
+    memory.add_message(42, 10, "dan", msg.content)
+    await ai.on_message(msg)
+    prompt = mock_openrouter.REQUESTS[0]["messages"][-1]["content"]
+    assert '[THÓI QUEN CHAT CỦA USER ĐỂ BẮT CHƯỚC]: "f*** v*** :)))", "ok đ***"' in prompt
+    assert "fuck" not in prompt.lower().replace("f***", "")
+    assert "PHẠT_ĐƯỢC_PHÉP" in prompt  # detection ran on the raw text

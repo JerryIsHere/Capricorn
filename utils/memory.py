@@ -105,6 +105,18 @@ class Memory:
             for r in reversed(rows)
         ]
 
+    def recent_user_messages(self, channel_id: int, user_id: int, limit: int = 8,
+                             skip_latest: bool = True) -> list[str]:
+        """Oldest-first recent messages by one user; the newest (the triggering one) is skipped."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT content FROM messages WHERE channel_id=? AND author_id=? AND is_bot=0 "
+                "ORDER BY id DESC LIMIT ?",
+                (channel_id, user_id, limit + int(skip_latest)),
+            ).fetchall()
+        rows = rows[int(skip_latest):]
+        return [r[0] for r in reversed(rows)]
+
     # --- style / engram --------------------------------------------------
     def learn_style(self, user_id: int, content: str) -> None:
         pairs = extract_style(content)

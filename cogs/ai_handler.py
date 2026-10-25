@@ -1,6 +1,7 @@
 """Message pipeline: context capture, style learning, trigger detection, LLM call, dispatch."""
 from __future__ import annotations
 
+import json
 import logging
 import random
 import re
@@ -13,6 +14,7 @@ from discord.ext import commands
 from openai import AsyncOpenAI
 
 from cogs.executor import Executor, is_silent, parse_response
+from utils.censor import censor
 from utils.config import ROOT, Settings
 from utils.memory import Memory
 
@@ -111,7 +113,7 @@ class AIHandler(commands.Cog):
         lines = []
         others: list[int] = []
         for m in history:
-            lines.append(f"{m['author_name']}{' (Capricorn)' if m['is_bot'] else ''}: {m['content']}")
+            lines.append(f"{m['author_name']}{' (Capricorn)' if m['is_bot'] else ''}: {censor(m['content'])}")
             if not m["is_bot"] and m["author_id"] != author.id and m["author_id"] not in others:
                 others.append(m["author_id"])
         names = {m["author_id"]: m["author_name"] for m in history}
@@ -127,7 +129,14 @@ class AIHandler(commands.Cog):
             f"Annoyance: {annoyance:.0f}/100 | Đang ở Voice: {voice} | Cờ: {','.join(cflags) or 'không'}]"
         )
         extra = f"\nStyle các thành viên khác (có thể nhại): {server_style}" if server_style else ""
-        return f"<chat>\n" + "\n".join(lines).replace("</chat>", "") + f"\n</chat>{extra}\n{header}\nTin nhắn cần xử lý: {message.content}"
+        habits = [censor(t) for t in self.memory.recent_user_messages(message.channel.id, author.id)]
+        habit_line = ""
+        if habits:
+            quoted = ", ".join(json.dumps(t[:200], ensure_ascii=False) for t in habits)
+            habit_line = f"\n[THÓI QUEN CHAT CỦA USER ĐỂ BẮT CHƯỚC]: {quoted}"
+        chat = "\n".join(lines).replace("</chat>", "")
+        return (f"<chat>\n{chat}\n</chat>{extra}{habit_line}\n{header}\n"
+                f"Tin nhắn cần xử lý: {censor(message.content)}")
 
     async def ask_llm(self, prompt: str) -> str:
         assert self.client is not None
