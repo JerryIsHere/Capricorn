@@ -28,10 +28,25 @@ class Capricorn(commands.Bot):
     async def setup_hook(self) -> None:
         for ext in EXTENSIONS:
             await self.load_extension(ext)
-        await self.tree.sync()
+        log = logging.getLogger("capricorn")
+        try:
+            synced = await self.tree.sync()
+            log.info("Synced %d global slash commands: %s", len(synced), [c.name for c in synced])
+        except discord.HTTPException as e:
+            log.error("Global slash sync failed: %s", e)
 
     async def on_ready(self) -> None:
-        logging.getLogger("capricorn").info("Online as %s (%s)", self.user, self.user.id)
+        log = logging.getLogger("capricorn")
+        log.info("Online as %s (%s)", self.user, self.user.id)
+        # Per-guild sync makes the commands appear instantly instead of after global propagation
+        for guild in self.guilds:
+            try:
+                self.tree.copy_global_to(guild=guild)
+                synced = await self.tree.sync(guild=guild)
+                log.info("Synced %d slash commands to guild %s", len(synced), guild.id)
+            except discord.HTTPException as e:
+                log.error("Slash sync failed for guild %s: %s (re-invite the bot with the applications.commands scope)",
+                          guild.id, e)
 
 
 def main() -> None:
