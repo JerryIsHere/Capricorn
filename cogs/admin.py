@@ -26,10 +26,13 @@ MAX_CLONE_CHANNELS = 30
 MAX_TIMEOUT_MINUTES = 28 * 24 * 60
 
 
-def format_message(name: str, content: str) -> list[str]:
-    """Clean one chat message and return `Name: "content"` lines (empty if nothing useful is left)."""
-    cleaned = clean_chat_data(content)
-    return [f'{name}: "{line}"' for line in cleaned.splitlines()]
+def sample_line(text: str) -> str:
+    return f'- Mẫu câu tham khảo: "{text}"'
+
+
+def format_message(content: str) -> list[str]:
+    """Clean one chat message into sample-sentence lines (empty if nothing useful is left)."""
+    return [sample_line(line) for line in clean_chat_data(content).splitlines()]
 
 
 def append_vibe(lines: list[str]) -> int:
@@ -70,7 +73,7 @@ class Admin(commands.Cog):
         async for msg in interaction.channel.history(limit=amount):
             if _skippable(msg):
                 continue
-            lines.extend(reversed(format_message(msg.author.display_name, msg.content)))
+            lines.extend(reversed(format_message(msg.content)))
         lines.reverse()  # newest-first scan -> oldest-first file order
         n = append_vibe(lines)
         await interaction.followup.send(f"Nuốt xong {n} dòng rác của tụi mày. Óc tao bẩn thêm rồi đấy.", ephemeral=True)
@@ -103,7 +106,7 @@ class Admin(commands.Cog):
                     scanned += 1
                     if msg.author.id != target_user.id or _skippable(msg):
                         continue
-                    formatted = format_message(msg.author.display_name, msg.content)
+                    formatted = format_message(msg.content)
                     if formatted:
                         got.append((msg.created_at, formatted))
                     if len(got) >= amount:
@@ -132,9 +135,10 @@ class Admin(commands.Cog):
             return
         await interaction.response.defer(ephemeral=True)
         text = await extract_chat_from_image(ai.client, self.bot.settings.vision_models, image.url)
-        lines = [f'{name.strip()}: "{body.strip()}"' if (sep and name.strip() and body.strip()) else line
+        # OCR output is "Name: content"; keep only the content
+        lines = [sample_line(body.strip() if sep else line.strip())
                  for line in text.splitlines()
-                 for name, sep, body in [line.partition(": ")]]
+                 for _, sep, body in [line.partition(": ")] if (body if sep else line).strip()]
         n = append_vibe(lines)
         if not n:
             await interaction.followup.send("Soi nát cái ảnh mà chẳng đọc được chữ nào. Ảnh gì như c***.", ephemeral=True)
