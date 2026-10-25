@@ -218,3 +218,9 @@ async def test_empty_ping_gets_reply_even_for_commoner(env):
         assert msg.reply.await_count == int(expect), text
         if expect:
             assert msg.reply.await_args.args[0] == "Giề?"
+
+
+def test_system_prompt_includes_server_vibe():
+    from cogs.ai_handler import load_system_prompt
+    p = load_system_prompt()
+    assert "HỒ SƠ NGÔN TỪ CỦA SERVER" in p and "Ví dụ 1" in p and "ưu tiên tuyệt đối" in p

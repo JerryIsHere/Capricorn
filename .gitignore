@@ -9,3 +9,4 @@ data/
 .venv/
 venv/
 .pytest_cache/
+prompts/server_vibe.local.txt

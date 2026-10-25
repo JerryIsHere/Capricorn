@@ -34,6 +34,23 @@ USER_COOLDOWN = 4.0
 FILLER_RE = re.compile(r"(?<!\w)(ê+|ơi|oi|alo|hey|hi|yo|này|nè|đâu|dậy|ra đây)(?!\w)", re.IGNORECASE)
 MENTION_STRIP_RE = re.compile(r"<[@#!&]+\d+>")
 SYSTEM_PROMPT_PATH = ROOT / "prompts" / "capricorn_system.txt"
+# server_vibe.local.txt (git-ignored) overrides the committed sample so real chat logs stay private
+VIBE_PATHS = (ROOT / "prompts" / "server_vibe.local.txt", ROOT / "prompts" / "server_vibe.txt")
+VIBE_NOTE = (
+    "Các ví dụ dưới đây chỉ để học GIỌNG ĐIỆU (few-shot). Quy tắc phân quyền, [SILENT], mã lệnh "
+    "và việc che từ chửi thề bằng *** ở trên vẫn được ưu tiên tuyệt đối."
+)
+
+
+def load_system_prompt() -> str:
+    prompt = SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
+    for path in VIBE_PATHS:
+        if path.exists():
+            vibe = path.read_text(encoding="utf-8").strip()
+            if vibe:
+                prompt += f"\n\n{VIBE_NOTE}\n\n{vibe}\n"
+            break
+    return prompt
 
 
 @dataclass
@@ -53,7 +70,7 @@ class AIHandler(commands.Cog):
         self.bot = bot
         self.settings = settings
         self.memory = memory
-        self.system_prompt = SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
+        self.system_prompt = load_system_prompt()
         self.client: AsyncOpenAI | None = None
         if settings.openrouter_api_key:
             self.client = AsyncOpenAI(api_key=settings.openrouter_api_key,
