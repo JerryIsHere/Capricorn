@@ -220,10 +220,13 @@ async def test_empty_ping_gets_reply_even_for_commoner(env):
             assert msg.reply.await_args.args[0] == "Giề?"
 
 
-def test_system_prompt_includes_server_vibe():
-    from cogs.ai_handler import load_system_prompt
-    p = load_system_prompt()
-    assert "HỒ SƠ NGÔN TỪ CỦA SERVER" in p and "Ví dụ 1" in p and "ưu tiên tuyệt đối" in p
+def test_system_prompt_includes_server_vibe(monkeypatch, tmp_path):
+    from cogs import ai_handler
+    vibe = tmp_path / "vibe.txt"
+    vibe.write_text('- Mẫu câu tham khảo: "ừ đấy"\n', encoding="utf-8")
+    monkeypatch.setattr(ai_handler, "VIBE_PATHS", [vibe])
+    p = ai_handler.load_system_prompt()
+    assert "ưu tiên tuyệt đối" in p and "ừ đấy" in p
 
 
 async def test_gemini_backup_used_when_openrouter_fails(env):
