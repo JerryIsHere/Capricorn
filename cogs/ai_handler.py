@@ -173,7 +173,10 @@ class AIHandler(commands.Cog):
             # OpenRouter-native routing: falls through this list if the primary is rate-limited/down
             extra_body={"models": fallbacks} if fallbacks else None,
         )
-        return (resp.choices[0].message.content or "").strip()
+        content = (resp.choices[0].message.content or "").strip()
+        if not content:
+            log.warning("Model %s returned empty content", resp.model)
+        return content
 
     # --- event -----------------------------------------------------------
     @commands.Cog.listener()
