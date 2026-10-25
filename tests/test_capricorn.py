@@ -250,3 +250,31 @@ def test_parse_gemini_models_blocks_argon():
     assert parse_gemini_models("models/gemini-2.5-pro, gemini-argon-1,Argon-x,gemini-2.0-flash") == (
         "gemini-2.5-pro", "gemini-2.0-flash")
     assert parse_gemini_models("argon") == DEFAULT_GEMINI_MODELS
+
+
+async def test_tag_spam_gets_five_minute_timeout(env):
+    ai, guild, members, _ = env
+    user = make_member(10, "dan")
+    members[10] = user
+    for i in range(5):
+        ai._last_call.clear()
+        await ai.on_message(make_message(user, "<@1>", guild, mentions=[ai.bot.user]))
+    user.timeout.assert_not_called()
+    msg = make_message(user, "<@1>", guild, mentions=[ai.bot.user])
+    await ai.on_message(msg)
+    user.timeout.assert_awaited_once()
+    assert user.timeout.await_args.args[0] == timedelta(minutes=5)
+    msg.reply.assert_awaited_once()
+
+
+async def test_tag_spam_does_not_hit_admin_or_plain_name(env):
+    ai, guild, members, _ = env
+    admin = make_member(20, "boss", admin=True)
+    for _ in range(8):
+        ai._last_call.clear()
+        await ai.on_message(make_message(admin, "<@1>", guild, mentions=[ai.bot.user]))
+    admin.timeout.assert_not_called()
+    user = make_member(10, "dan")
+    for _ in range(8):
+        await ai.on_message(make_message(user, "capri", guild))
+    user.timeout.assert_not_called()

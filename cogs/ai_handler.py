@@ -1,6 +1,7 @@
 """Message pipeline: context capture, style learning, trigger detection, LLM call, dispatch."""
 from __future__ import annotations
 
+import datetime as dt
 import json
 import logging
 import random
@@ -30,6 +31,7 @@ ANNOYANCE_THRESHOLD = 50.0
 ANNOYANCE_AFTER_PUNISH = 20.0
 RANDOM_CHANCE = 0.05
 SPAM_COUNT, SPAM_WINDOW = 6, 8.0
+TAG_LIMIT, TAG_WINDOW, TAG_TIMEOUT = 5, 60.0, 300  # >5 tags in 60s => 5 minute timeout
 USER_COOLDOWN = 4.0
 FILLER_RE = re.compile(r"(?<!\w)(ê+|ơi|oi|alo|hey|hi|yo|này|nè|đâu|dậy|ra đây)(?!\w)", re.IGNORECASE)
 MENTION_STRIP_RE = re.compile(r"<[@#!&]+\d+>")
@@ -84,6 +86,7 @@ class AIHandler(commands.Cog):
             log.warning("No OPENROUTER_API_KEY/GEMINI_API_KEY set: LLM replies disabled (learning still runs).")
         self._recent: dict[int, deque[float]] = defaultdict(lambda: deque(maxlen=SPAM_COUNT))
         self._last_call: dict[int, float] = {}
+        self._tags: dict[int, deque[float]] = defaultdict(deque)
 
     # --- classification --------------------------------------------------
     def is_vip(self, member: discord.Member) -> bool:
@@ -95,6 +98,33 @@ class AIHandler(commands.Cog):
         own = {r.id for r in message.guild.me.roles if r.managed} if message.guild and message.guild.me else set()
         wanted = own | self.settings.call_role_ids
         return any(r.id in wanted for r in message.role_mentions)
+
+    def _explicit_tag(self, message: discord.Message) -> bool:
+        return self.bot.user in message.mentions or self._role_pinged(message)
+
+    async def _check_tag_spam(self, message: discord.Message) -> bool:
+        """Count @/role pings aimed at the bot; punish with a timeout past TAG_LIMIT. True if punished."""
+        if not self._explicit_tag(message):
+            return False
+        author = message.author
+        now = time.monotonic()
+        q = self._tags[author.id]
+        q.append(now)
+        while q and now - q[0] > TAG_WINDOW:
+            q.popleft()
+        if len(q) <= TAG_LIMIT or author.guild_permissions.administrator:
+            return False  # administrators can't be timed out
+        q.clear()
+        try:
+            await author.timeout(dt.timedelta(seconds=TAG_TIMEOUT), reason="Capricorn: tag spam")
+        except (discord.Forbidden, discord.HTTPException) as e:
+            log.warning("Tag-spam timeout failed for %s: %s", author.id, type(e).__name__)
+            return False
+        self.memory.set_annoyance(author.id, ANNOYANCE_AFTER_PUNISH)
+        await message.reply(
+            f"Tag tao quá {TAG_LIMIT} lần rồi hả? Cút ra góc ngồi {TAG_TIMEOUT // 60} phút cho não nguội lại.",
+            mention_author=False, allowed_mentions=discord.AllowedMentions.none())
+        return True
 
     def _is_reply_to_bot(self, message: discord.Message) -> bool:
         ref = message.reference
@@ -224,6 +254,9 @@ class AIHandler(commands.Cog):
         is_admin = author.guild_permissions.administrator
         vip_or_admin = is_admin or self.is_vip(author)
         history = self.memory.recent_messages(message.channel.id)
+
+        if await self._check_tag_spam(message):
+            return
 
         # Step 2: trigger detection
         flags = self.classify(message, vip_or_admin, history)
