@@ -125,6 +125,7 @@ class AIHandler(commands.Cog):
     async def ask_llm(self, prompt: str) -> str:
         assert self.client is not None
         primary, *fallbacks = self.settings.openrouter_models
+        fallbacks = fallbacks[:3]  # OpenRouter rejects more than 3 fallback models
         resp = await self.client.chat.completions.create(
             model=primary,
             messages=[{"role": "system", "content": self.system_prompt},

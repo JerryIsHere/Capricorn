@@ -164,3 +164,10 @@ async def test_vip_gets_reply_and_non_admin_vip_cannot_run_commands(env):
     msg.reply.assert_awaited_once()
     await ai.dispatch(msg, "x [SYS_CMD:TIMEOUT|40|600]", True, False)
     vip.timeout.assert_not_called()
+
+
+def test_parse_models_tolerates_messy_input():
+    from utils.config import DEFAULT_MODEL, parse_models
+    assert parse_models("a:free, b:free ,,a:free") == ("a:free", "b:free")
+    assert parse_models('(\n  "a:free"\n  "b:free"\n)') == ("a:free", "b:free")
+    assert parse_models("") == (DEFAULT_MODEL,)

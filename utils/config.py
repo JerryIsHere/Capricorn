@@ -2,15 +2,18 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+DEFAULT_MODEL = "google/gemma-4-31b-it:free"
 
 
 def parse_models(raw: str) -> tuple[str, ...]:
-    models = tuple(m.strip() for m in raw.split(",") if m.strip())
+    # Tolerate commas, whitespace/newlines, quotes and bash-array parentheses
+    parts = (p.strip("\"'()") for p in re.split(r"[,\s]+", raw))
+    models = tuple(dict.fromkeys(p for p in parts if p))
     return models or (DEFAULT_MODEL,)
 
 
