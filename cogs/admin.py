@@ -196,7 +196,7 @@ class Admin(commands.Cog):
                 "Không dùng [SILENT], không kèm mã lệnh."
             )
             try:
-                insult, _ = parse_response(await ai.ask_llm(prompt, notify_channel=interaction.channel))
+                insult, _ = parse_response(await ai.ask_llm(prompt))
             except Exception as e:
                 log.warning("Fry insult generation failed: %s", type(e).__name__)
         insult = censor_output(censor(insult.replace("@", ""))).strip()[:500] or f"Ngồi im {minutes} phút đi, đồ rác mạng."

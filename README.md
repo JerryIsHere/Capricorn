@@ -8,7 +8,7 @@ pip install -r requirements.txt
 cp .env.example .env     # fill DISCORD_TOKEN, OPENROUTER_API_KEY, OPENROUTER_MODELS (comma-separated; first is primary, rest are auto-fallbacks), VIP_ROLE_ID
 python main.py
 ```
-Optional: set `GEMINI_API_KEY` (and `GEMINI_MODELS`, comma-separated, tried in order) to use Google Gemini only after every configured OpenRouter model fails. Live defaults (`gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.8-flash`) are always appended after your list, so removed model IDs (404) cannot break the fallback. The bot appends OpenRouter's `openrouter/free` router as its final OpenRouter fallback and mentions the configured admin in the channel once when it switches to Gemini; the alert resets after OpenRouter recovers.
+Optional: set `GEMINI_API_KEY` (and `GEMINI_MODELS`, comma-separated, tried in order) to use Google Gemini only after every configured OpenRouter model fails. Live defaults (`gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.8-flash`) are always appended after your list, so removed model IDs (404) cannot break the fallback. The bot appends OpenRouter's `openrouter/free` router as its final OpenRouter fallback. Provider/model switches are only logged to the console, never posted in chat.
 In Codespaces, set the same names as **Codespaces secrets** instead of using a `.env` file. Enable the *Message Content*, *Server Members* intents in the Discord developer portal. Secrets are only read from the environment; `.env`, `*.db` and `data/` are git-ignored.
 
 ## How it works

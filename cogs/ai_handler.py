@@ -38,7 +38,6 @@ TAG_LIMIT, TAG_WINDOW, TAG_TIMEOUT = 5, 60.0, 300  # >5 tags in 60s => 5 minute 
 USER_COOLDOWN = 4.0
 LLM_TIMEOUT = 10.0  # hard per-request cap; a slow model is skipped, never waited on
 OUTAGE_REPLY = "Đứt cáp mạng rồi. Đợi đấy."
-FALLBACK_ADMIN_ID = 1017049328264679435
 
 
 class LLMUnavailable(Exception):
@@ -112,7 +111,6 @@ class AIHandler(commands.Cog):
         self.bot = bot
         self.settings = settings
         self.memory = memory
-        self._openrouter_outage_notified = False
         self.client: AsyncOpenAI | None = None
         if settings.openrouter_api_key:
             self.client = AsyncOpenAI(api_key=settings.openrouter_api_key,
@@ -271,34 +269,19 @@ class AIHandler(commands.Cog):
                         resp.model or model, choice.finish_reason)
         return content
 
-    async def ask_llm(self, prompt: str, *, notify_channel: discord.abc.Messageable | None = None) -> str:
+    async def ask_llm(self, prompt: str) -> str:
         """Tier 1: each OpenRouter model in turn. Tier 2: Gemini. Tier 3: print('Error') and raise."""
         if self.client:
             for model in self.settings.openrouter_models:
                 try:
                     content = await self._complete(self.client, model, prompt)
                     if content:
-                        self._openrouter_outage_notified = False
                         return content
                     log.warning("OpenRouter model %s returned no usable text", model)
                 except Exception as e:  # 429 / 503 / timeout / forbidden ...: just try the next model
                     log.warning("OpenRouter model %s failed (%s), trying next", model, type(e).__name__)
                     continue
-            if not self._openrouter_outage_notified:
-                self._openrouter_outage_notified = True
-                log.warning("All OpenRouter models failed; switching to Gemini")
-                if notify_channel is not None:
-                    notice = (
-                        f"<@{FALLBACK_ADMIN_ID}> Cảnh báo: toàn bộ model OpenRouter đang lỗi; "
-                        "Capricorn chuyển sang Gemini."
-                    )
-                    try:
-                        await notify_channel.send(
-                            notice,
-                            allowed_mentions=discord.AllowedMentions(users=[discord.Object(id=FALLBACK_ADMIN_ID)]),
-                        )
-                    except discord.HTTPException as e:
-                        log.warning("Could not notify admin about OpenRouter outage: %s", type(e).__name__)
+            log.warning("All OpenRouter models failed; switching to Gemini")  # console only, never chat
         if self.gemini:
             for model in self.settings.gemini_models:
                 try:
@@ -352,7 +335,7 @@ class AIHandler(commands.Cog):
         prompt = self.build_prompt(message, role_label, history, flags, annoyance, defense_allowed)
         try:
             async with message.channel.typing():
-                raw = await self.ask_llm(prompt, notify_channel=message.channel)
+                raw = await self.ask_llm(prompt)
         except LLMUnavailable:
             if vip_or_admin or defense_allowed or flags.empty_ping:
                 await message.reply(OUTAGE_REPLY, mention_author=False,

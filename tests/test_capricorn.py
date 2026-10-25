@@ -269,7 +269,7 @@ def test_openrouter_free_router_is_always_last_fallback():
         "one:free", OPENROUTER_FREE_FALLBACK)
 
 
-async def test_gemini_fallback_notifies_admin_after_all_openrouter_models_fail(env):
+async def test_gemini_fallback_is_silent_in_chat(env):
     from unittest.mock import patch
     ai, guild, members, _ = env
     ai.gemini = ai.client
@@ -292,9 +292,7 @@ async def test_gemini_fallback_notifies_admin_after_all_openrouter_models_fail(e
         await ai.on_message(msg)
         assert calls == ["mock/primary", "mock/fb1", "mock/fb2", "gemini/a"]
 
-    msg.channel.send.assert_awaited_once()
-    alert = msg.channel.send.await_args.args[0]
-    assert "<@1017049328264679435>" in alert and "chuyển sang Gemini" in alert
+    msg.channel.send.assert_not_called()  # provider switches are never announced in chat
     assert msg.reply.await_args.args[0] == "Đã qua Gemini."
 
 
