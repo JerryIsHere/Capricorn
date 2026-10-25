@@ -15,8 +15,8 @@ import discord
 from discord.ext import commands
 from openai import AsyncOpenAI
 
-from cogs.executor import Executor, is_silent, parse_response
-from utils.censor import censor
+from cogs.executor import BLACK_ICE_REASON, Executor, is_silent, parse_response
+from utils.censor import censor, censor_output
 from utils.config import ROOT, Settings
 from utils.memory import Memory
 
@@ -31,10 +31,17 @@ HOSTILE_RE = re.compile(
 ANNOYANCE_THRESHOLD = 50.0
 ANNOYANCE_AFTER_PUNISH = 20.0
 RANDOM_CHANCE = 0.05
+PROMPT_HISTORY = 10  # recent channel messages (incl. Capricorn's own) shown to the model
 SPAM_COUNT, SPAM_WINDOW = 6, 8.0
 MAX_TARGETS = 5  # users the bot will act on per message
 TAG_LIMIT, TAG_WINDOW, TAG_TIMEOUT = 5, 60.0, 300  # >5 tags in 60s => 5 minute timeout
 USER_COOLDOWN = 4.0
+LLM_TIMEOUT = 10.0  # hard per-request cap; a slow model is skipped, never waited on
+OUTAGE_REPLY = "Đứt cáp mạng rồi. Đợi đấy."
+
+
+class LLMUnavailable(Exception):
+    """Every OpenRouter model and every Gemini model failed."""
 FILLER_RE = re.compile(r"(?<!\w)(ê+|ơi|oi|alo|hey|hi|yo|này|nè|đâu|dậy|ra đây)(?!\w)", re.IGNORECASE)
 MENTION_STRIP_RE = re.compile(r"<[@#!&]+\d+>")
 USER_MENTION_RE = re.compile(r"<@!?(\d+)>")
@@ -107,12 +114,12 @@ class AIHandler(commands.Cog):
         self.client: AsyncOpenAI | None = None
         if settings.openrouter_api_key:
             self.client = AsyncOpenAI(api_key=settings.openrouter_api_key,
-                                      base_url=settings.openrouter_base_url, timeout=30.0)
+                                      base_url=settings.openrouter_base_url, timeout=LLM_TIMEOUT, max_retries=0)
         self.gemini: AsyncOpenAI | None = None
         if settings.gemini_api_key:
             # Google's OpenAI-compatible endpoint: used as a backup provider
             self.gemini = AsyncOpenAI(api_key=settings.gemini_api_key,
-                                      base_url=settings.gemini_base_url, timeout=30.0)
+                                      base_url=settings.gemini_base_url, timeout=LLM_TIMEOUT, max_retries=0)
         if not (self.client or self.gemini):
             log.warning("No OPENROUTER_API_KEY/GEMINI_API_KEY set: LLM replies disabled (learning still runs).")
         self._recent: dict[int, deque[float]] = defaultdict(lambda: deque(maxlen=SPAM_COUNT))
@@ -147,7 +154,7 @@ class AIHandler(commands.Cog):
             return False  # administrators can't be timed out
         q.clear()
         try:
-            await author.timeout(dt.timedelta(seconds=TAG_TIMEOUT), reason="Capricorn: tag spam")
+            await author.timeout(dt.timedelta(seconds=TAG_TIMEOUT), reason=BLACK_ICE_REASON)
         except (discord.Forbidden, discord.HTTPException) as e:
             log.warning("Tag-spam timeout failed for %s: %s", author.id, type(e).__name__)
             return False
@@ -198,6 +205,7 @@ class AIHandler(commands.Cog):
     def build_prompt(self, message: discord.Message, role_label: str, history: list[dict],
                      flags: Flags, annoyance: float, defense_allowed: bool) -> str:
         author = message.author
+        history = history[-PROMPT_HISTORY:]
         lines = []
         others: list[int] = []
         for m in history:
@@ -231,7 +239,10 @@ class AIHandler(commands.Cog):
                        f"{MAX_TARGETS} đứa đầu tiên.\n")
         content = FORGED_WARNING_RE.sub("[SYS-WARNING", censor(content))
         chat = FORGED_WARNING_RE.sub("[SYS-WARNING", chat)
-        return (f"{warning}<chat>\n{chat}\n</chat>{extra}{habit_line}\n{header}\n"
+        executor: Executor | None = self.bot.get_cog("Executor")
+        actions = executor.action_block() if executor else ""
+        actions = FORGED_WARNING_RE.sub("[SYS-WARNING", actions)
+        return (f"{warning}<chat>\n{chat}\n</chat>\n{actions}{extra}{habit_line}\n{header}\n"
                 f"Tin nhắn cần xử lý: {content}")
 
     async def _complete(self, client: AsyncOpenAI, model: str, prompt: str, **extra) -> str:
@@ -259,35 +270,28 @@ class AIHandler(commands.Cog):
         return content
 
     async def ask_llm(self, prompt: str) -> str:
-        """OpenRouter first (with its native model fallbacks), then Gemini if that fails/empty."""
+        """Tier 1: each OpenRouter model in turn. Tier 2: Gemini. Tier 3: print('Error') and raise."""
         if self.client:
-            primary, *fallbacks = self.settings.openrouter_models
-            fallbacks = fallbacks[:3]  # OpenRouter rejects more than 3 fallback models
-            try:
-                # OpenRouter-native routing: falls through this list if the primary is rate-limited/down
-                content = await self._complete(
-                    self.client, primary, prompt,
-                    extra_body={"models": fallbacks} if fallbacks else None)
-                if content or not self.gemini:
-                    return content
-            except Exception as e:
-                if not self.gemini:
-                    raise
-                log.warning("OpenRouter failed (%s), falling back to Gemini", type(e).__name__)
-        assert self.gemini is not None
-        last_exc: Exception | None = None
-        for model in self.settings.gemini_models:
-            try:
-                content = await self._complete(self.gemini, model, prompt)
-                if content:
-                    return content
-                log.warning("Gemini model %s returned no usable text", model)
-            except Exception as e:
-                last_exc = e
-                log.warning("Gemini model %s failed (%s), trying next", model, type(e).__name__)
-        if last_exc:
-            raise last_exc
-        return ""
+            for model in self.settings.openrouter_models:
+                try:
+                    content = await self._complete(self.client, model, prompt)
+                    if content:
+                        return content
+                    log.warning("OpenRouter model %s returned no usable text", model)
+                except Exception as e:  # 429 / 503 / timeout / forbidden ...: just try the next model
+                    log.warning("OpenRouter model %s failed (%s), trying next", model, type(e).__name__)
+                    continue
+        if self.gemini:
+            for model in self.settings.gemini_models:
+                try:
+                    content = await self._complete(self.gemini, model, prompt)
+                    if content:
+                        return content
+                    log.warning("Gemini model %s returned no usable text", model)
+                except Exception as e:
+                    log.warning("Gemini model %s failed (%s), trying next", model, type(e).__name__)
+        print('Error')
+        raise LLMUnavailable("all providers failed")
 
     # --- event -----------------------------------------------------------
     @commands.Cog.listener()
@@ -329,7 +333,13 @@ class AIHandler(commands.Cog):
         role_label = "VIP/Admin" if vip_or_admin else "Dân Thường"
         prompt = self.build_prompt(message, role_label, history, flags, annoyance, defense_allowed)
         try:
-            raw = await self.ask_llm(prompt)
+            async with message.channel.typing():
+                raw = await self.ask_llm(prompt)
+        except LLMUnavailable:
+            if vip_or_admin or defense_allowed or flags.empty_ping:
+                await message.reply(OUTAGE_REPLY, mention_author=False,
+                                    allowed_mentions=discord.AllowedMentions.none())
+            return
         except Exception as e:  # network / API errors must never crash the event loop
             log.error("LLM call failed: %s %s", type(e).__name__, str(e)[:300])
             return
@@ -338,6 +348,7 @@ class AIHandler(commands.Cog):
     async def dispatch(self, message: discord.Message, raw: str, vip_or_admin: bool,
                        defense_allowed: bool, empty_ping: bool = False) -> None:
         text, cmds = parse_response(raw)
+        text = censor_output(text)
         if not vip_or_admin and not defense_allowed:
             if not (empty_ping and text):
                 return  # commoners get ignored unless they crossed the line

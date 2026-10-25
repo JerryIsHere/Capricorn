@@ -19,7 +19,7 @@ def parse_models(raw: str, default: tuple[str, ...] = (DEFAULT_MODEL,)) -> tuple
     models = tuple(dict.fromkeys(p for p in parts if p))
     return models or default
 
-DEFAULT_GEMINI_MODELS = ("gemini-3.1-flash-lite",)
+DEFAULT_GEMINI_MODELS = ("gemini-2.0-flash",)
 BLOCKED_MODEL_WORDS = ("argon",)  # never route to these, even if listed in the env
 
 

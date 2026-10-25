@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 
 _ROOTS = (
     # English
@@ -29,3 +30,29 @@ def _mask(m: re.Match) -> str:
 def censor(text: str) -> str:
     """Replace profanity with a masked form (first letter + '***')."""
     return PROFANITY_RE.sub(_mask, text)
+
+
+# --- output safety net: hide the vowel of any profanity the model forgot to mask -------------
+_OUT_ROOTS = _ROOTS + (r"mẹ",)
+_OUT_SUFFIXES = r"(?:ing|ed|er|ers|s|in)"
+OUTPUT_PROFANITY_RE = re.compile(
+    rf"(?<![\w*])((?:{'|'.join(_OUT_ROOTS)}))({_OUT_SUFFIXES})?(?![\w*])", re.IGNORECASE | re.UNICODE
+)
+_VOWELS = set("aeiou")
+
+
+def _is_vowel(ch: str) -> bool:
+    return unicodedata.normalize("NFD", ch)[0].lower() in _VOWELS
+
+
+def mask_vowel(word: str) -> str:
+    """fuck -> f*ck, đéo -> đ*o, lồn -> l*n, mẹ -> m*. No vowel (vcl): keep first letter, star the rest."""
+    for i, ch in enumerate(word):
+        if _is_vowel(ch):
+            return word[:i] + "*" + word[i + 1:]  # one star per hidden character
+    return word[0] + "*" * (len(word) - 1)
+
+
+def censor_output(text: str) -> str:
+    """Post-process bot output: mask unmasked profanity by hiding its vowel (already-starred words are left alone)."""
+    return OUTPUT_PROFANITY_RE.sub(lambda m: mask_vowel(m.group(0)), text)

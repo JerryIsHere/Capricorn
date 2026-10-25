@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import re
+from collections import deque
 from dataclasses import dataclass
 
 import discord
@@ -24,6 +25,8 @@ NOTICE_RE = re.compile(
     re.IGNORECASE,
 )
 SILENT_RE = re.compile(r"\[\s*SILENT\s*\]", re.IGNORECASE)
+BLACK_ICE_REASON = "Black ICE Capricorn: Khóa mõm vì làm ô nhiễm băng thông mạng."  # never reveals who gave the order
+ACTION_LOG_SIZE = 15
 AUTO_DEFENSE_MAX_SECONDS = 60
 MAX_TIMEOUT_SECONDS = 28 * 24 * 3600
 
@@ -65,6 +68,15 @@ def _on(value: str) -> bool | None:
 class Executor(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.actions: deque[str] = deque(maxlen=ACTION_LOG_SIZE)  # what Capricorn recently did, oldest first
+
+    def record(self, text: str) -> None:
+        self.actions.append(f"[{dt.datetime.now().strftime('%H:%M')}] {text}")
+
+    def action_block(self) -> str:
+        if not self.actions:
+            return ""
+        return "[LỊCH SỬ THỰC THI CỦA CAPRICORN]\n" + "\n".join(self.actions) + "\n"
 
     # ------------------------------------------------------------------
     async def execute(self, message: discord.Message, cmds: list[Command], *,
@@ -86,13 +98,21 @@ class Executor(commands.Cog):
                 results.append(f"denied {cmd.name}")
                 continue
             try:
-                results.append(await self._run(cmd, message, guild, is_admin))
+                result = await self._run(cmd, message, guild, is_admin)
+                results.append(result)
+                self._remember(cmd, result, guild)
             except discord.Forbidden:
                 results.append(f"forbidden {cmd.name}")
             except (discord.HTTPException, ValueError, IndexError) as e:
                 log.warning("Command %s failed: %s", cmd, e)
                 results.append(f"failed {cmd.name}: {e}")
         return results
+
+    def _remember(self, cmd: Command, result: str, guild: discord.Guild) -> None:
+        target = _id(cmd.args[0]) if cmd.args else None
+        member = guild.get_member(target) if target else None
+        who = f"<@{target}> ({member.display_name})" if member and target else (f"<@{target}>" if target else "")
+        self.record(f"Tao vừa thực thi {cmd.name} lên {who}: {result}".replace("  ", " "))
 
     @staticmethod
     def _defense_ok(cmd: Command, author: discord.Member, defense_allowed: bool) -> bool:
@@ -119,7 +139,7 @@ class Executor(commands.Cog):
     async def _run(self, cmd: Command, message: discord.Message,
                    guild: discord.Guild, is_admin: bool) -> str:
         a = cmd.args
-        reason = f"Capricorn: requested by {message.author} ({message.author.id})"
+        reason = BLACK_ICE_REASON
         if cmd.name == "SCAN":
             member = await self._member(guild, a[0])
             await message.channel.send(embed=build_scan_embed(member),

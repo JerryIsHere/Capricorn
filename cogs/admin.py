@@ -10,8 +10,8 @@ from discord import app_commands
 from discord.ext import commands
 
 from cogs.ai_handler import AIHandler, vibe_path
-from cogs.executor import parse_response
-from utils.censor import censor
+from cogs.executor import BLACK_ICE_REASON, Executor, parse_response
+from utils.censor import censor, censor_output
 from utils.purifier import clean_chat_data, parse_srt_subtitles, sample_line
 from utils.vision import extract_chat_from_image, is_image
 
@@ -54,9 +54,10 @@ class Admin(commands.Cog):
         self.bot = bot
 
     async def _guard(self, interaction: discord.Interaction) -> bool:
+        """Defer first (Discord gives only 3s), then enforce the admin hard-lock."""
         if interaction.user.id == ADMIN_ID:
             return True
-        await interaction.response.send_message(DENY_MSG, ephemeral=True)
+        await interaction.followup.send(DENY_MSG, ephemeral=True)
         return False
 
     @app_commands.command(name="capri_learn", description="Học văn phong từ các tin nhắn gần nhất trong kênh")
@@ -64,7 +65,6 @@ class Admin(commands.Cog):
     async def capri_learn(self, interaction: discord.Interaction, amount: app_commands.Range[int, 1, 500] = 50):
         if not await self._guard(interaction):
             return
-        await interaction.response.defer(ephemeral=True)
         lines: list[str] = []
         async for msg in interaction.channel.history(limit=amount):
             if _skippable(msg):
@@ -83,7 +83,6 @@ class Admin(commands.Cog):
                           channel: Optional[discord.TextChannel] = None, all_channels: bool = False):
         if not await self._guard(interaction):
             return
-        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         if all_channels:
             me = guild.me
@@ -123,13 +122,12 @@ class Admin(commands.Cog):
         if not await self._guard(interaction):
             return
         if not is_image(image.filename, image.content_type):
-            await interaction.response.send_message("Đây đ*** phải ảnh. Mù à?", ephemeral=True)
+            await interaction.followup.send("Đây đ*** phải ảnh. Mù à?", ephemeral=True)
             return
         ai: AIHandler | None = self.bot.get_cog("AIHandler")
         if not ai or not ai.client:
-            await interaction.response.send_message("Chưa có OpenRouter key, quét bằng niềm tin à?", ephemeral=True)
+            await interaction.followup.send("Chưa có OpenRouter key, quét bằng niềm tin à?", ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True)
         text = await extract_chat_from_image(ai.client, self.bot.settings.vision_models, image.url)
         # OCR output is "Name: content"; keep only the content
         lines = [sample_line(body.strip() if sep else line.strip())
@@ -148,9 +146,8 @@ class Admin(commands.Cog):
         if not await self._guard(interaction):
             return
         if not raw_text and not file:
-            await interaction.response.send_message("Không đưa gì thì tao nuốt cái đ*** gì?", ephemeral=True)
+            await interaction.followup.send("Không đưa gì thì tao nuốt cái đ*** gì?", ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True)
         chunks: list[str] = []
         if raw_text:
             chunks.append("\n".join(sample_line(x) for x in clean_chat_data(raw_text).splitlines()))
@@ -172,7 +169,7 @@ class Admin(commands.Cog):
             return
         with vibe_path().open("w", encoding="utf-8"):
             pass
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "Đã xóa sạch mớ rác rưởi tụi mày nhét vào đầu tao. Băng thông lại sạch sẽ.", ephemeral=True)
 
     @app_commands.command(name="capri_fry", description="Khóa mõm một thành viên và chửi nó")
@@ -181,9 +178,8 @@ class Admin(commands.Cog):
                         minutes: app_commands.Range[int, 1, MAX_TIMEOUT_MINUTES] = 10):
         if not await self._guard(interaction):
             return
-        await interaction.response.defer(ephemeral=True)
         try:
-            await target_user.timeout(dt.timedelta(minutes=minutes), reason="Capricorn: /capri_fry")
+            await target_user.timeout(dt.timedelta(minutes=minutes), reason=BLACK_ICE_REASON)
         except discord.Forbidden:
             await interaction.followup.send("Role thằng này cao hơn tao, khóa mõm đ*** nổi.", ephemeral=True)
             return
@@ -202,7 +198,10 @@ class Admin(commands.Cog):
                 insult, _ = parse_response(await ai.ask_llm(prompt))
             except Exception as e:
                 log.warning("Fry insult generation failed: %s", type(e).__name__)
-        insult = censor(insult.replace("@", "")).strip()[:500] or f"Ngồi im {minutes} phút đi, đồ rác mạng."
+        insult = censor_output(censor(insult.replace("@", ""))).strip()[:500] or f"Ngồi im {minutes} phút đi, đồ rác mạng."
+        executor: Executor | None = self.bot.get_cog("Executor")
+        if executor:
+            executor.record(f"Tao vừa khóa mõm (timeout) {target_user.mention} ({target_user.display_name}) {minutes} phút bằng /capri_fry")
         await interaction.channel.send(
             f"{target_user.mention} {insult}",
             allowed_mentions=discord.AllowedMentions(users=[target_user]))
