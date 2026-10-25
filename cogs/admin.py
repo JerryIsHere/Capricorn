@@ -21,6 +21,8 @@ ADMIN_ID = 1017049328264679435
 DENY_MSG = "Quyền đ*** đâu mà đòi đụng vào hệ thống của tao? Cút!"
 MAX_FEED_BYTES = 1_000_000
 MAX_LINES_PER_FEED = 2000
+MAX_SCAN_MESSAGES = 5000  # hard cap on messages read per /capri_clone run
+MAX_CLONE_CHANNELS = 30
 MAX_TIMEOUT_MINUTES = 28 * 24 * 60
 
 
@@ -74,28 +76,47 @@ class Admin(commands.Cog):
         await interaction.followup.send(f"Nuốt xong {n} dòng rác của tụi mày. Óc tao bẩn thêm rồi đấy.", ephemeral=True)
 
     @app_commands.command(name="capri_clone", description="Sao chép văn phong của một thành viên")
+    @app_commands.describe(channel="Kênh cần quét (mặc định: kênh hiện tại)",
+                           all_channels="Quét mọi kênh chữ bot đọc được (chậm hơn)")
     @app_commands.guild_only()
     async def capri_clone(self, interaction: discord.Interaction, target_user: discord.Member,
-                          amount: app_commands.Range[int, 1, 200] = 50):
+                          amount: app_commands.Range[int, 1, 200] = 50,
+                          channel: Optional[discord.TextChannel] = None, all_channels: bool = False):
         if not await self._guard(interaction):
             return
         await interaction.response.defer(ephemeral=True)
-        lines: list[str] = []
-        got = 0
-        async for msg in interaction.channel.history(limit=amount * 5):
-            if got >= amount:
+        guild = interaction.guild
+        if all_channels:
+            me = guild.me
+            channels = [c for c in guild.text_channels
+                        if (p := c.permissions_for(me)).view_channel and p.read_message_history][:MAX_CLONE_CHANNELS]
+        else:
+            channels = [channel or interaction.channel]
+        budget = min(amount * 5, MAX_SCAN_MESSAGES) if not all_channels else MAX_SCAN_MESSAGES
+        scanned = 0
+        got: list[tuple[dt.datetime, list[str]]] = []
+        for ch in channels:
+            if len(got) >= amount or scanned >= budget:
                 break
-            if msg.author.id != target_user.id or _skippable(msg):
+            try:
+                async for msg in ch.history(limit=min(amount * 5, budget - scanned)):
+                    scanned += 1
+                    if msg.author.id != target_user.id or _skippable(msg):
+                        continue
+                    formatted = format_message(msg.author.display_name, msg.content)
+                    if formatted:
+                        got.append((msg.created_at, formatted))
+                    if len(got) >= amount:
+                        break
+            except discord.Forbidden:
                 continue
-            formatted = format_message(msg.author.display_name, msg.content)
-            if formatted:
-                lines.extend(reversed(formatted))
-                got += 1
-        lines.reverse()
+        # keep the newest `amount` messages overall, then write oldest -> newest
+        got = sorted(got, key=lambda x: x[0], reverse=True)[:amount]
+        lines = [line for _, fl in sorted(got, key=lambda x: x[0]) for line in fl]
         n = append_vibe(lines)
+        note = "" if len(got) >= amount else f" (mới gom {len(got)}/{amount}, đã quét {scanned} tin — nó ít nói quá)"
         await interaction.followup.send(
-            f"Hút xong nơ-ron của {target_user.display_name}: {got} câu ({n} dòng). Thằng này hết bí mật rồi.",
-            ephemeral=True)
+            f"Hút xong nơ-ron của {target_user.display_name}: {len(got)} câu ({n} dòng){note}.", ephemeral=True)
 
     @app_commands.command(name="capri_scan", description="Đọc ảnh chụp đoạn chat và học văn phong")
     @app_commands.guild_only()
