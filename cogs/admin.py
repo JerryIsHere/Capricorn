@@ -23,6 +23,7 @@ MAX_FEED_BYTES = 1_000_000
 MAX_LINES_PER_FEED = 2000
 MAX_SCAN_MESSAGES = 5000  # hard cap on messages read per /capri_clone run
 MAX_CLONE_CHANNELS = 30
+MAX_AMOUNT = 1000
 MAX_TIMEOUT_MINUTES = 28 * 24 * 60
 
 
@@ -44,9 +45,23 @@ def append_vibe(lines: list[str]) -> int:
     return len(lines)
 
 
+OWO_SHORT_CMDS = {"oh", "ob", "oc", "ocf", "oz", "ow", "oq", "od", "os", "oe", "ot", "ox", "oa", "ol", "op", "ogem", "oinv"}
+
+
+def is_owo_command(content: str) -> bool:
+    """True for OwO bot calls: 'owo ...' / 'o ...' prefix, or short commands like 'oh', 'ob', 'ocf 100'."""
+    words = content.lower().split()
+    if not words:
+        return False
+    first = words[0]
+    if first.startswith("owo") or first == "o":
+        return True
+    return first in OWO_SHORT_CMDS and len(words) <= 3 and all(len(w) <= 6 for w in words[1:])
+
+
 def _skippable(msg: discord.Message) -> bool:
     content = msg.content.strip()
-    return msg.author.bot or not content or content.startswith(("!", "/"))
+    return msg.author.bot or not content or content.startswith(("!", "/")) or is_owo_command(content)
 
 
 class Admin(commands.Cog):
@@ -63,7 +78,7 @@ class Admin(commands.Cog):
 
     @app_commands.command(name="capri_learn", description="Học văn phong từ các tin nhắn gần nhất trong kênh")
     @app_commands.guild_only()
-    async def capri_learn(self, interaction: discord.Interaction, amount: app_commands.Range[int, 1, 500] = 50):
+    async def capri_learn(self, interaction: discord.Interaction, amount: app_commands.Range[int, 1, MAX_AMOUNT] = 50):
         if not await self._guard(interaction):
             return
         lines: list[str] = []
@@ -80,7 +95,7 @@ class Admin(commands.Cog):
                            all_channels="Quét mọi kênh chữ bot đọc được (chậm hơn)")
     @app_commands.guild_only()
     async def capri_clone(self, interaction: discord.Interaction, target_user: discord.Member,
-                          amount: app_commands.Range[int, 1, 200] = 50,
+                          amount: app_commands.Range[int, 1, MAX_AMOUNT] = 50,
                           channel: Optional[discord.TextChannel] = None, all_channels: bool = False):
         if not await self._guard(interaction):
             return

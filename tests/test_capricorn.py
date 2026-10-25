@@ -432,3 +432,11 @@ async def test_action_memory_in_prompt_and_neutral_reason(env):
     assert "20" not in BLACK_ICE_REASON and "boss" not in BLACK_ICE_REASON
     prompt = ai.build_prompt(make_message(victim, "mày mute tao à", guild), "Dân Thường", [], __import__("cogs.ai_handler", fromlist=["Flags"]).Flags(), 0, False)
     assert "[LỊCH SỬ THỰC THI CỦA CAPRICORN]" in prompt and "<@30>" in prompt and "TIMEOUT" in prompt
+
+
+def test_owo_commands_are_filtered():
+    from cogs.admin import is_owo_command
+    for c in ("owo hunt", "OwO", "owoh", "o b", "oh", "ocf 100", "o daily"):
+        assert is_owo_command(c), c
+    for c in ("ok luôn", "oh my god bạn ơi thật vậy", "ông nói gì", "oke nha"):
+        assert not is_owo_command(c), c
