@@ -45,7 +45,7 @@ async def env(tmp_path):
     settings = Settings(
         discord_token="x", openrouter_api_key="test-key", openrouter_models=("mock/primary", "mock/fb1", "mock/fb2"),
         openrouter_base_url=str(server.make_url("/v1")), vip_role_id=VIP_ROLE, call_role_ids=frozenset({777}),
-        db_path=tmp_path / "t.db", gemini_api_key="", gemini_model="g", gemini_base_url="",
+        db_path=tmp_path / "t.db", gemini_api_key="", gemini_models=("g",), gemini_base_url="",
     )
     memory = Memory(":memory:")
     bot = MagicMock()
@@ -230,16 +230,23 @@ async def test_gemini_backup_used_when_openrouter_fails(env):
     from unittest.mock import patch
     ai, guild, members, _ = env
     ai.gemini = ai.client  # same mock server stands in for Gemini
-    ai.settings = type(ai.settings)(**{**ai.settings.__dict__, "gemini_model": "gem/model"})
+    ai.settings = type(ai.settings)(**{**ai.settings.__dict__, "gemini_models": ("gem/a", "gem/b")})
     calls = []
     real = ai._complete
 
     async def flaky(client, model, prompt, **extra):
         calls.append(model)
-        if model == "mock/primary":
-            raise RuntimeError("openrouter down")
+        if model in ("mock/primary", "gem/a"):
+            raise RuntimeError("down")
         return await real(client, model, prompt, **extra)
 
     with patch.object(ai, "_complete", flaky):
         out = await ai.ask_llm("[User: a | ID: 1 | Role: VIP/Admin | x]\nTin nhắn cần xử lý: hi")
-    assert calls == ["mock/primary", "gem/model"] and out
+    assert calls == ["mock/primary", "gem/a", "gem/b"] and out
+
+
+def test_parse_gemini_models_blocks_argon():
+    from utils.config import DEFAULT_GEMINI_MODELS, parse_gemini_models
+    assert parse_gemini_models("models/gemini-2.5-pro, gemini-argon-1,Argon-x,gemini-2.0-flash") == (
+        "gemini-2.5-pro", "gemini-2.0-flash")
+    assert parse_gemini_models("argon") == DEFAULT_GEMINI_MODELS

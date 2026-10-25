@@ -16,6 +16,16 @@ def parse_models(raw: str) -> tuple[str, ...]:
     models = tuple(dict.fromkeys(p for p in parts if p))
     return models or (DEFAULT_MODEL,)
 
+DEFAULT_GEMINI_MODELS = ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-pro")
+BLOCKED_MODEL_WORDS = ("argon",)  # never route to these, even if listed in the env
+
+
+def parse_gemini_models(raw: str) -> tuple[str, ...]:
+    parts = (p.strip("\"'()").removeprefix("models/") for p in re.split(r"[,\s]+", raw))
+    models = tuple(dict.fromkeys(
+        p for p in parts if p and not any(w in p.lower() for w in BLOCKED_MODEL_WORDS)))
+    return models or DEFAULT_GEMINI_MODELS
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -24,7 +34,7 @@ class Settings:
     openrouter_models: tuple[str, ...]  # first = primary, rest = OpenRouter fallbacks
     openrouter_base_url: str
     gemini_api_key: str
-    gemini_model: str
+    gemini_models: tuple[str, ...]  # tried in order
     gemini_base_url: str
     vip_role_id: int | None
     call_role_ids: frozenset[int]  # extra roles that, when pinged, summon the bot
@@ -41,7 +51,8 @@ class Settings:
             openrouter_base_url=os.getenv("OPENROUTER_BASE_URL", "").strip()
             or "https://openrouter.ai/api/v1",
             gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
-            gemini_model=os.getenv("GEMINI_MODEL", "").strip() or "gemini-2.0-flash",
+            gemini_models=parse_gemini_models(
+                os.getenv("GEMINI_MODELS", "") or os.getenv("GEMINI_MODEL", "")),
             gemini_base_url=os.getenv("GEMINI_BASE_URL", "").strip()
             or "https://generativelanguage.googleapis.com/v1beta/openai/",
             vip_role_id=int(vip) if vip.isdigit() else None,

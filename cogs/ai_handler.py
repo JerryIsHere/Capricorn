@@ -196,7 +196,18 @@ class AIHandler(commands.Cog):
                     raise
                 log.warning("OpenRouter failed (%s), falling back to Gemini", type(e).__name__)
         assert self.gemini is not None
-        return await self._complete(self.gemini, self.settings.gemini_model, prompt)
+        last_exc: Exception | None = None
+        for model in self.settings.gemini_models:
+            try:
+                content = await self._complete(self.gemini, model, prompt)
+                if content:
+                    return content
+            except Exception as e:
+                last_exc = e
+                log.warning("Gemini model %s failed (%s), trying next", model, type(e).__name__)
+        if last_exc:
+            raise last_exc
+        return ""
 
     # --- event -----------------------------------------------------------
     @commands.Cog.listener()
