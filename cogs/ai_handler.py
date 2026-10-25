@@ -214,7 +214,7 @@ class AIHandler(commands.Cog):
         try:
             raw = await self.ask_llm(prompt)
         except Exception as e:  # network / API errors must never crash the event loop
-            log.error("OpenRouter call failed: %s", type(e).__name__)
+            log.error("OpenRouter call failed: %s %s", type(e).__name__, str(e)[:300])
             return
         await self.dispatch(message, raw, vip_or_admin, defense_allowed, empty_ping=flags.empty_ping)
 

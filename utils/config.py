@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_MODEL = "google/gemma-4-31b-it:free"
+DEFAULT_MODEL = "poolside/laguna-xs-2.1:free"
 
 
 def parse_models(raw: str) -> tuple[str, ...]:
