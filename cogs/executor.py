@@ -25,7 +25,7 @@ NOTICE_RE = re.compile(
     re.IGNORECASE,
 )
 SILENT_RE = re.compile(r"\[\s*SILENT\s*\]", re.IGNORECASE)
-BLACK_ICE_REASON = "Black ICE Capricorn: Khóa mõm vì làm ô nhiễm băng thông mạng."  # never reveals who gave the order
+BLACK_ICE_REASON = "Capricorn: Khóa mõm vì làm phiền cả server."  # never reveals who gave the order
 ACTION_LOG_SIZE = 15
 AUTO_DEFENSE_MAX_SECONDS = 60
 MAX_TIMEOUT_SECONDS = 28 * 24 * 3600
@@ -215,8 +215,8 @@ class Executor(commands.Cog):
 
 def build_scan_embed(member: discord.Member) -> discord.Embed:
     embed = discord.Embed(
-        title="▌NCPD // NETRUNNER SCAN",
-        description=f"`TARGET LOCKED` · {member.mention}",
+        title="▌HỒ SƠ THÀNH VIÊN",
+        description=f"Đối tượng: {member.mention}",
         color=0x00F0FF,
     )
     embed.set_thumbnail(url=member.display_avatar.url)

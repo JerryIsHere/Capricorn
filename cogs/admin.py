@@ -115,7 +115,7 @@ class Admin(commands.Cog):
         n = append_vibe(lines)
         note = "" if len(got) >= amount else f" (mới gom {len(got)}/{amount}, đã quét {scanned} tin — nó ít nói quá)"
         await interaction.followup.send(
-            f"Hút xong nơ-ron của {target_user.display_name}: {len(got)} câu ({n} dòng){note}.", ephemeral=True)
+            f"Học xong cách nói của {target_user.display_name}: {len(got)} câu ({n} dòng){note}.", ephemeral=True)
 
     @app_commands.command(name="capri_scan", description="Đọc ảnh chụp đoạn chat và học văn phong")
     @app_commands.guild_only()
@@ -171,7 +171,7 @@ class Admin(commands.Cog):
         with vibe_path().open("w", encoding="utf-8"):
             pass
         await interaction.followup.send(
-            "Đã xóa sạch mớ rác rưởi tụi mày nhét vào đầu tao. Băng thông lại sạch sẽ.", ephemeral=True)
+            "Đã xóa sạch mớ rác rưởi tụi mày nhét vào đầu tao. Sạch sẽ rồi.", ephemeral=True)
 
     @app_commands.command(name="capri_fry", description="Khóa mõm một thành viên và chửi nó")
     @app_commands.guild_only()
@@ -199,7 +199,7 @@ class Admin(commands.Cog):
                 insult, _ = parse_response(await ai.ask_llm(prompt))
             except Exception as e:
                 log.warning("Fry insult generation failed: %s", type(e).__name__)
-        insult = safe_output(censor(insult.replace("@", ""))).strip()[:500] or f"Ngồi im {minutes} phút đi, đồ rác mạng."
+        insult = safe_output(censor(insult.replace("@", ""))).strip()[:500] or f"Ngồi im {minutes} phút đi, đồ óc chóa."
         executor: Executor | None = self.bot.get_cog("Executor")
         if executor:
             executor.record(f"Tao vừa khóa mõm (timeout) {target_user.mention} ({target_user.display_name}) {minutes} phút bằng /capri_fry")

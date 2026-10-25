@@ -148,7 +148,7 @@ async def test_admin_scan_and_mute(env):
     msg = make_message(admin, "capricorn quét <@30>", guild)
     await ai.on_message(msg)
     embed = msg.channel.send.await_args.kwargs["embed"]
-    assert "NCPD" in embed.title and any(f.name == "User ID" for f in embed.fields)
+    assert "HỒ SƠ" in embed.title and any(f.name == "User ID" for f in embed.fields)
     ai._last_call.clear()  # skip per-user cooldown
     msg2 = make_message(admin, "capricorn mute <@30>", guild)
     await ai.on_message(msg2)
