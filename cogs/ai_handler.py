@@ -75,8 +75,13 @@ class AIHandler(commands.Cog):
         if settings.openrouter_api_key:
             self.client = AsyncOpenAI(api_key=settings.openrouter_api_key,
                                       base_url=settings.openrouter_base_url, timeout=30.0)
-        else:
-            log.warning("OPENROUTER_API_KEY not set: LLM replies disabled (learning still runs).")
+        self.gemini: AsyncOpenAI | None = None
+        if settings.gemini_api_key:
+            # Google's OpenAI-compatible endpoint: used as a backup provider
+            self.gemini = AsyncOpenAI(api_key=settings.gemini_api_key,
+                                      base_url=settings.gemini_base_url, timeout=30.0)
+        if not (self.client or self.gemini):
+            log.warning("No OPENROUTER_API_KEY/GEMINI_API_KEY set: LLM replies disabled (learning still runs).")
         self._recent: dict[int, deque[float]] = defaultdict(lambda: deque(maxlen=SPAM_COUNT))
         self._last_call: dict[int, float] = {}
 
@@ -160,23 +165,38 @@ class AIHandler(commands.Cog):
         return (f"<chat>\n{chat}\n</chat>{extra}{habit_line}\n{header}\n"
                 f"Tin nhắn cần xử lý: {censor(message.content)}")
 
-    async def ask_llm(self, prompt: str) -> str:
-        assert self.client is not None
-        primary, *fallbacks = self.settings.openrouter_models
-        fallbacks = fallbacks[:3]  # OpenRouter rejects more than 3 fallback models
-        resp = await self.client.chat.completions.create(
-            model=primary,
+    async def _complete(self, client: AsyncOpenAI, model: str, prompt: str, **extra) -> str:
+        resp = await client.chat.completions.create(
+            model=model,
             messages=[{"role": "system", "content": self.system_prompt},
                       {"role": "user", "content": prompt}],
             max_tokens=400,
             temperature=0.8,
-            # OpenRouter-native routing: falls through this list if the primary is rate-limited/down
-            extra_body={"models": fallbacks} if fallbacks else None,
+            **extra,
         )
         content = (resp.choices[0].message.content or "").strip()
         if not content:
             log.warning("Model %s returned empty content", resp.model)
         return content
+
+    async def ask_llm(self, prompt: str) -> str:
+        """OpenRouter first (with its native model fallbacks), then Gemini if that fails/empty."""
+        if self.client:
+            primary, *fallbacks = self.settings.openrouter_models
+            fallbacks = fallbacks[:3]  # OpenRouter rejects more than 3 fallback models
+            try:
+                # OpenRouter-native routing: falls through this list if the primary is rate-limited/down
+                content = await self._complete(
+                    self.client, primary, prompt,
+                    extra_body={"models": fallbacks} if fallbacks else None)
+                if content or not self.gemini:
+                    return content
+            except Exception as e:
+                if not self.gemini:
+                    raise
+                log.warning("OpenRouter failed (%s), falling back to Gemini", type(e).__name__)
+        assert self.gemini is not None
+        return await self._complete(self.gemini, self.settings.gemini_model, prompt)
 
     # --- event -----------------------------------------------------------
     @commands.Cog.listener()
@@ -203,7 +223,7 @@ class AIHandler(commands.Cog):
             bump += 5.0 if flags.direct else 0.0
             if bump:
                 annoyance = self.memory.add_annoyance(author.id, bump)
-        if not flags.triggered() or self.client is None:
+        if not flags.triggered() or not (self.client or self.gemini):
             return
         now = time.monotonic()
         if now - self._last_call.get(author.id, 0.0) < USER_COOLDOWN:
@@ -217,7 +237,7 @@ class AIHandler(commands.Cog):
         try:
             raw = await self.ask_llm(prompt)
         except Exception as e:  # network / API errors must never crash the event loop
-            log.error("OpenRouter call failed: %s %s", type(e).__name__, str(e)[:300])
+            log.error("LLM call failed: %s %s", type(e).__name__, str(e)[:300])
             return
         await self.dispatch(message, raw, vip_or_admin, defense_allowed, empty_ping=flags.empty_ping)
 

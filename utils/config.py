@@ -23,6 +23,9 @@ class Settings:
     openrouter_api_key: str
     openrouter_models: tuple[str, ...]  # first = primary, rest = OpenRouter fallbacks
     openrouter_base_url: str
+    gemini_api_key: str
+    gemini_model: str
+    gemini_base_url: str
     vip_role_id: int | None
     call_role_ids: frozenset[int]  # extra roles that, when pinged, summon the bot
     db_path: Path
@@ -37,6 +40,10 @@ class Settings:
             openrouter_models=parse_models(os.getenv("OPENROUTER_MODELS", "")),
             openrouter_base_url=os.getenv("OPENROUTER_BASE_URL", "").strip()
             or "https://openrouter.ai/api/v1",
+            gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
+            gemini_model=os.getenv("GEMINI_MODEL", "").strip() or "gemini-2.0-flash",
+            gemini_base_url=os.getenv("GEMINI_BASE_URL", "").strip()
+            or "https://generativelanguage.googleapis.com/v1beta/openai/",
             vip_role_id=int(vip) if vip.isdigit() else None,
             call_role_ids=frozenset(
                 int(x) for x in re.split(r"[,\s]+", os.getenv("CAPRICORN_CALL_ROLE_IDS", "")) if x.isdigit()
