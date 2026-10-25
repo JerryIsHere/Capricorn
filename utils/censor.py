@@ -56,3 +56,13 @@ def mask_vowel(word: str) -> str:
 def censor_output(text: str) -> str:
     """Post-process bot output: mask unmasked profanity by hiding its vowel (already-starred words are left alone)."""
     return OUTPUT_PROFANITY_RE.sub(lambda m: mask_vowel(m.group(0)), text)
+
+
+def escape_markdown_stars(text: str) -> str:
+    """Escape every '*' so censor masks (f*ck, đ***) render literally instead of triggering Discord bold/italic."""
+    return re.sub(r"(?<!\\)\*", r"\\*", text)
+
+
+def safe_output(text: str) -> str:
+    """censor_output + markdown-safe stars; use this right before sending to Discord."""
+    return escape_markdown_stars(censor_output(text))

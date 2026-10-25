@@ -11,7 +11,7 @@ from discord.ext import commands
 
 from cogs.ai_handler import AIHandler, vibe_path
 from cogs.executor import BLACK_ICE_REASON, Executor, parse_response
-from utils.censor import censor, censor_output
+from utils.censor import censor, safe_output
 from utils.purifier import clean_chat_data, parse_srt_subtitles, sample_line
 from utils.vision import extract_chat_from_image, is_image
 
@@ -199,7 +199,7 @@ class Admin(commands.Cog):
                 insult, _ = parse_response(await ai.ask_llm(prompt))
             except Exception as e:
                 log.warning("Fry insult generation failed: %s", type(e).__name__)
-        insult = censor_output(censor(insult.replace("@", ""))).strip()[:500] or f"Ngồi im {minutes} phút đi, đồ rác mạng."
+        insult = safe_output(censor(insult.replace("@", ""))).strip()[:500] or f"Ngồi im {minutes} phút đi, đồ rác mạng."
         executor: Executor | None = self.bot.get_cog("Executor")
         if executor:
             executor.record(f"Tao vừa khóa mõm (timeout) {target_user.mention} ({target_user.display_name}) {minutes} phút bằng /capri_fry")

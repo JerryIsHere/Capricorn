@@ -16,7 +16,7 @@ from discord.ext import commands
 from openai import AsyncOpenAI
 
 from cogs.executor import BLACK_ICE_REASON, Executor, is_silent, parse_response
-from utils.censor import censor, censor_output
+from utils.censor import censor, safe_output
 from utils.config import ROOT, Settings
 from utils.memory import Memory
 
@@ -349,7 +349,7 @@ class AIHandler(commands.Cog):
     async def dispatch(self, message: discord.Message, raw: str, vip_or_admin: bool,
                        defense_allowed: bool, empty_ping: bool = False) -> None:
         text, cmds = parse_response(raw)
-        text = censor_output(text)
+        text = safe_output(text)
         if not vip_or_admin and not defense_allowed:
             if not (empty_ping and text):
                 return  # commoners get ignored unless they crossed the line
