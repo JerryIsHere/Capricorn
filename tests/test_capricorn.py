@@ -205,3 +205,16 @@ async def test_prompt_has_masked_habits_and_hostile_still_detected(env):
     assert '[THÓI QUEN CHAT CỦA USER ĐỂ BẮT CHƯỚC]: "f*** v*** :)))", "ok đ***"' in prompt
     assert "fuck" not in prompt.lower().replace("f***", "")
     assert "PHẠT_ĐƯỢC_PHÉP" in prompt  # detection ran on the raw text
+
+
+async def test_empty_ping_gets_reply_even_for_commoner(env):
+    ai, guild, members, _ = env
+    user = make_member(10, "dan")
+    members[10] = user
+    for text, expect in (("<@1>", True), ("Capri", True), ("ê capri", True), ("capri ơi giúp mình với", False)):
+        ai._last_call.clear()
+        msg = make_message(user, text, guild, mentions=[ai.bot.user] if text == "<@1>" else [])
+        await ai.on_message(msg)
+        assert msg.reply.await_count == int(expect), text
+        if expect:
+            assert msg.reply.await_args.args[0] == "Giề?"

@@ -15,6 +15,8 @@ def script_reply(prompt: str) -> str:
     uid = re.search(r"ID: (\d+)", header)
     uid = uid.group(1) if uid else "0"
     msg = prompt.rsplit("Tin nhắn cần xử lý:", 1)[-1]
+    if "PING_TRỐNG" in header:
+        return "Giề?"
     if "Dân Thường" in header:
         if "PHẠT_ĐƯỢC_PHÉP" in header:
             return f"Một đống mã rác biết nói. Im lặng đi. [SYS_CMD:TIMEOUT|{uid}|60]"

@@ -31,6 +31,8 @@ ANNOYANCE_AFTER_PUNISH = 20.0
 RANDOM_CHANCE = 0.05
 SPAM_COUNT, SPAM_WINDOW = 6, 8.0
 USER_COOLDOWN = 4.0
+FILLER_RE = re.compile(r"(?<!\w)(ê+|ơi|oi|alo|hey|hi|yo|này|nè|đâu|dậy|ra đây)(?!\w)", re.IGNORECASE)
+MENTION_STRIP_RE = re.compile(r"<[@#!&]+\d+>")
 SYSTEM_PROMPT_PATH = ROOT / "prompts" / "capricorn_system.txt"
 
 
@@ -40,9 +42,10 @@ class Flags:
     hostile: bool = False  # insulting / trash-talking Capricorn
     spam: bool = False
     random_chime: bool = False
+    empty_ping: bool = False  # bare tag / bare name with nothing else
 
     def triggered(self) -> bool:
-        return self.direct or self.hostile or self.spam or self.random_chime
+        return self.direct or self.hostile or self.spam or self.random_chime or self.empty_ping
 
 
 class AIHandler(commands.Cog):
@@ -88,6 +91,8 @@ class AIHandler(commands.Cog):
             or self._is_reply_to_bot(message)
             or bool(BOT_NAME_RE.search(content))
         )
+        stripped = FILLER_RE.sub(" ", BOT_NAME_RE.sub(" ", MENTION_STRIP_RE.sub(" ", content)))
+        flags.empty_ping = flags.direct and not re.search(r"\w", stripped)
         # hostile only counts when it plausibly targets the bot: a bot reference now or in recent context
         if HOSTILE_RE.search(content):
             recent = history[-6:-1]
@@ -122,7 +127,7 @@ class AIHandler(commands.Cog):
         )
         voice = "có" if getattr(author, "voice", None) else "không"
         cflags = [f for f, on in (("GỌI_BOT", flags.direct), ("NÓI_XẤU", flags.hostile),
-                                  ("SPAM", flags.spam), ("PHẠT_ĐƯỢC_PHÉP", defense_allowed)) if on]
+                                  ("SPAM", flags.spam), ("PING_TRỐNG", flags.empty_ping), ("PHẠT_ĐƯỢC_PHÉP", defense_allowed)) if on]
         header = (
             f"[User: {author.display_name} | ID: {author.id} | Role: {role_label} | "
             f"Style hay dùng: {self.memory.style_summary(author.id)} | "
@@ -194,13 +199,15 @@ class AIHandler(commands.Cog):
         except Exception as e:  # network / API errors must never crash the event loop
             log.error("OpenRouter call failed: %s", type(e).__name__)
             return
-        await self.dispatch(message, raw, vip_or_admin, defense_allowed)
+        await self.dispatch(message, raw, vip_or_admin, defense_allowed, empty_ping=flags.empty_ping)
 
     async def dispatch(self, message: discord.Message, raw: str, vip_or_admin: bool,
-                       defense_allowed: bool) -> None:
+                       defense_allowed: bool, empty_ping: bool = False) -> None:
         text, cmds = parse_response(raw)
         if not vip_or_admin and not defense_allowed:
-            return  # commoners get ignored unless they crossed the line
+            if not (empty_ping and text):
+                return  # commoners get ignored unless they crossed the line
+            cmds = []  # a bare ping earns a curt reply, never actions
         if is_silent(raw) or (not text and not cmds):
             return
         if text:
