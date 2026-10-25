@@ -249,6 +249,7 @@ def test_parse_gemini_models_blocks_argon():
     from utils.config import DEFAULT_GEMINI_MODELS, parse_gemini_models
     assert parse_gemini_models("models/gemini-2.5-pro, gemini-argon-1,Argon-x,gemini-2.0-flash") == (
         "gemini-2.5-pro", "gemini-2.0-flash")
+    assert parse_gemini_models("") == ("gemini-3.1-flash-lite",)
     assert parse_gemini_models("argon") == DEFAULT_GEMINI_MODELS
 
 

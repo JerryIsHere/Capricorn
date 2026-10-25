@@ -8,7 +8,7 @@ pip install -r requirements.txt
 cp .env.example .env     # fill DISCORD_TOKEN, OPENROUTER_API_KEY, OPENROUTER_MODELS (comma-separated; first is primary, rest are auto-fallbacks), VIP_ROLE_ID
 python main.py
 ```
-Optional: set `GEMINI_API_KEY` (and `GEMINI_MODELS`, comma-separated, tried in order) to use Google Gemini as a backup when OpenRouter fails.
+Optional: set `GEMINI_API_KEY` (and `GEMINI_MODELS`, comma-separated, tried in order) to use Google Gemini as a backup when OpenRouter fails. The tested default is `gemini-3.1-flash-lite`; override it with model IDs enabled for your API key.
 In Codespaces, set the same names as **Codespaces secrets** instead of using a `.env` file. Enable the *Message Content*, *Server Members* intents in the Discord developer portal. Secrets are only read from the environment; `.env`, `*.db` and `data/` are git-ignored.
 
 ## How it works
