@@ -6,13 +6,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+
+
+def parse_models(raw: str) -> tuple[str, ...]:
+    models = tuple(m.strip() for m in raw.split(",") if m.strip())
+    return models or (DEFAULT_MODEL,)
 
 
 @dataclass(frozen=True)
 class Settings:
     discord_token: str
     openrouter_api_key: str
-    openrouter_model: str
+    openrouter_models: tuple[str, ...]  # first = primary, rest = OpenRouter fallbacks
     openrouter_base_url: str
     vip_role_id: int | None
     db_path: Path
@@ -24,8 +30,7 @@ class Settings:
         return cls(
             discord_token=os.getenv("DISCORD_TOKEN", "").strip(),
             openrouter_api_key=os.getenv("OPENROUTER_API_KEY", "").strip(),
-            openrouter_model=os.getenv("OPENROUTER_MODEL", "").strip()
-            or "google/gemini-2.0-flash-001",
+            openrouter_models=parse_models(os.getenv("OPENROUTER_MODELS", "")),
             openrouter_base_url=os.getenv("OPENROUTER_BASE_URL", "").strip()
             or "https://openrouter.ai/api/v1",
             vip_role_id=int(vip) if vip.isdigit() else None,

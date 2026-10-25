@@ -124,12 +124,15 @@ class AIHandler(commands.Cog):
 
     async def ask_llm(self, prompt: str) -> str:
         assert self.client is not None
+        primary, *fallbacks = self.settings.openrouter_models
         resp = await self.client.chat.completions.create(
-            model=self.settings.openrouter_model,
+            model=primary,
             messages=[{"role": "system", "content": self.system_prompt},
                       {"role": "user", "content": prompt}],
             max_tokens=400,
             temperature=0.8,
+            # OpenRouter-native routing: falls through this list if the primary is rate-limited/down
+            extra_body={"models": fallbacks} if fallbacks else None,
         )
         return (resp.choices[0].message.content or "").strip()
 

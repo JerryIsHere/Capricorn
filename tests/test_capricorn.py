@@ -42,7 +42,7 @@ async def env(tmp_path):
     await server.start_server()
     mock_openrouter.REQUESTS.clear()
     settings = Settings(
-        discord_token="x", openrouter_api_key="test-key", openrouter_model="mock/model",
+        discord_token="x", openrouter_api_key="test-key", openrouter_models=("mock/primary", "mock/fb1", "mock/fb2"),
         openrouter_base_url=str(server.make_url("/v1")), vip_role_id=VIP_ROLE,
         db_path=tmp_path / "t.db",
     )
@@ -90,6 +90,8 @@ async def test_commoner_calling_bot_is_ignored(env):
     msg = make_message(user, "capricorn ơi giúp mình với", guild)
     await ai.on_message(msg)
     assert len(mock_openrouter.REQUESTS) == 1  # LLM consulted...
+    req = mock_openrouter.REQUESTS[0]
+    assert req["model"] == "mock/primary" and req["models"] == ["mock/fb1", "mock/fb2"]
     msg.reply.assert_not_called()  # ...but silence enforced
     user.timeout.assert_not_called()
 
