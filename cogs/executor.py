@@ -25,7 +25,7 @@ NOTICE_RE = re.compile(
     re.IGNORECASE,
 )
 SILENT_RE = re.compile(r"\[\s*SILENT\s*\]", re.IGNORECASE)
-BLACK_ICE_REASON = "Capricorn: Khóa mõm vì làm phiền cả server."  # never reveals who gave the order
+BLACK_ICE_REASON = "Capricorn: Khóa mõm vì tao thích thế."  # never reveals who gave the order
 ACTION_LOG_SIZE = 15
 AUTO_DEFENSE_MAX_SECONDS = 60
 MAX_TIMEOUT_SECONDS = 28 * 24 * 3600
