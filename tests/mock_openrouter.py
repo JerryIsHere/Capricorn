@@ -19,7 +19,7 @@ def script_reply(prompt: str) -> str:
         return "Giề?"
     if "Dân Thường" in header:
         if "PHẠT_ĐƯỢC_PHÉP" in header:
-            return f"Một đống mã rác biết nói. Im lặng đi. [SYS_CMD:TIMEOUT|{uid}|60]"
+            return f"Một thằng vô danh biết nói. Im lặng đi. [SYS_CMD:TIMEOUT|{uid}|60]"
         return "[SILENT]"
     target = re.search(r"<@!?(\d+)>", msg)
     if "quét" in msg and target:
